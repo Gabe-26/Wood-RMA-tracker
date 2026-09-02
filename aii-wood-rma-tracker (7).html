@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AII Wood RMA Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #e9e2cf;
+    --surface: #fbf9f2;
+    --surface-2: #f3eee0;
+    --ink: #2b241d;
+    --ink-soft: #6b6152;
+    --walnut: #4a3728;
+    --walnut-dark: #362819;
+    --sage: #66795a;
+    --sage-dark: #4c5c43;
+    --amber: #a97a2e;
+    --brick: #8c4a34;
+    --line: #d6cbac;
+    --line-soft: #e3dac2;
+    --focus: #2f6f8f;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;}
+  html, body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 15px;
+  }
+  h1,h2,h3, .figure{
+    font-family: 'Zilla Slab', serif;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  button, input, select, textarea{ font-family: inherit; font-size: inherit; color: inherit; }
+  :focus-visible{ outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  header.app-header{
+    background: var(--walnut);
+    color: #f1e9d8;
+    padding: 22px clamp(16px, 4vw, 40px) 0;
+  }
+  header.app-header .title-row{
+    display:flex; align-items:baseline; gap: 14px; flex-wrap: wrap;
+  }
+  header.app-header h1{
+    margin: 0; font-size: 26px; color: #f7f1e2;
+  }
+  header.app-header .subtitle{
+    margin: 2px 0 18px; color: #cbb894; font-size: 13.5px;
+  }
+  .conn-status{
+    display:inline-block; font-size: 11.5px; padding: 3px 10px; margin-left: 4px;
+    border: 1px solid; vertical-align: middle; font-weight:600; border-radius: 2px;
+  }
+  .conn-status.connecting{ color:#e8dcc0; border-color:#a97a2e; background: rgba(169,122,46,.2); }
+  .conn-status.online{ color:#c9e3cf; border-color:#66795a; background: rgba(102,121,90,.25); }
+  .conn-status.offline{ color:#f0c9c9; border-color:#8c4a34; background: rgba(140,74,52,.3); }
+  nav.tabs{
+    display:flex; gap: 4px; margin-top: 14px;
+  }
+  nav.tabs button{
+    background: none; border: none; cursor: pointer;
+    color: #d9c9a8; padding: 10px 16px 12px;
+    font-size: 14.5px; font-weight: 500;
+    border-bottom: 3px solid transparent;
+    transition: color .15s, border-color .15s;
+  }
+  nav.tabs button:hover{ color: #f7f1e2; }
+  nav.tabs button.active{
+    color: #f7f1e2; border-bottom-color: var(--amber);
+  }
+
+  main{
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 26px clamp(16px, 4vw, 40px) 60px;
+  }
+  .panel{ display:none; }
+  .panel.active{ display:block; }
+
+  .stat-strip{
+    display:flex; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line);
+    margin-bottom: 20px;
+  }
+  .stat-block{
+    flex: 1; padding: 14px 18px; border-left: 4px solid var(--line);
+    min-width: 130px;
+  }
+  .stat-block:first-child{ border-left: none; }
+  .stat-block.fence{ border-left-color: var(--walnut); }
+  .stat-block.gate{ border-left-color: var(--sage); }
+  .stat-block.post{ border-left-color: var(--amber); }
+  .stat-block.value{ border-left-color: var(--sage); }
+  .stat-block.reused{ border-left-color: var(--focus); }
+  .stat-block.scrapped{ border-left-color: var(--brick); }
+  .stat-block .num{ font-family:'Zilla Slab',serif; font-size: 26px; font-weight: 700; line-height:1; }
+  .stat-block .lbl{ font-size: 12px; color: var(--ink-soft); margin-top: 5px; }
+
+  .card{
+    background: var(--surface); border: 1px solid var(--line);
+    padding: 18px 20px; margin-bottom: 18px;
+  }
+  .card h2{ margin: 0 0 4px; font-size: 19px; }
+  .card .hint{ color: var(--ink-soft); font-size: 13px; margin: 0 0 14px; }
+  .card code{ background: var(--surface-2); padding: 1px 5px; font-size: 12.5px; }
+
+  .filter-row{
+    display:flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px;
+    align-items:flex-end;
+  }
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field label{ font-size: 11.5px; text-transform: uppercase; letter-spacing:.05em; color: var(--ink-soft); }
+  .field input, .field select, .field textarea{
+    background: #fff; border: 1px solid var(--line); padding: 7px 9px; min-width: 120px;
+  }
+  .field textarea{ min-width: 260px; }
+  .btn{
+    background: var(--walnut); color: #f1e9d8; border: none;
+    padding: 8px 16px; cursor:pointer; font-weight: 500;
+  }
+  .btn:hover{ background: var(--walnut-dark); }
+  .btn.secondary{ background: none; color: var(--walnut); border: 1px solid var(--walnut); }
+  .btn.secondary:hover{ background: var(--surface-2); }
+  .btn.danger{ background: none; color: var(--brick); border: 1px solid var(--brick); }
+  .btn.danger:hover{ background: #f5e8e2; }
+  .btn.small{ padding: 4px 9px; font-size: 12.5px; }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+
+  table{ width:100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th{
+    text-align:left; font-weight: 600; font-size: 11.5px; text-transform: uppercase;
+    letter-spacing: .04em; color: var(--ink-soft); border-bottom: 2px solid var(--line);
+    padding: 8px 8px; cursor: pointer; white-space: nowrap;
+  }
+  thead th:hover{ color: var(--ink); }
+  tbody td{ padding: 9px 8px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  tbody tr:hover{ background: var(--surface-2); }
+  .desc-cell{ max-width: 260px; }
+  .muted{ color: var(--ink-soft); }
+
+  .chip{
+    display:inline-block; padding: 2px 8px; font-size: 11.5px; font-weight:600;
+    border: 1px solid; white-space:nowrap;
+  }
+  .chip.awaiting{ color: var(--amber); border-color: var(--amber); background: #f7ecd9; }
+  .chip.storage{ color: var(--sage-dark); border-color: var(--sage); background: #eaeee4; }
+  .chip.reused{ color: var(--focus); border-color: var(--focus); background: #e5eef2; }
+  .chip.scrapped{ color: var(--brick); border-color: var(--brick); background: #f5e8e2; }
+  .chip.auto{ color: var(--ink-soft); border-color: var(--line); background: #fff; font-weight:500; }
+
+  .actions-cell{ white-space: nowrap; }
+  .actions-cell button{ margin-right: 4px; }
+
+  .drop-zone{
+    border: 2px dashed var(--line); background: var(--surface-2);
+    padding: 34px 20px; text-align:center; cursor:pointer; color: var(--ink-soft);
+  }
+  .drop-zone.drag{ border-color: var(--walnut); color: var(--walnut); }
+  .drop-zone strong{ color: var(--ink); }
+
+  .import-grid{ display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px 20px; margin: 16px 0; }
+  .import-grid .field{ width: 100%; }
+  .import-grid .field input, .import-grid .field select{ width:100%; }
+  .import-grid .full{ grid-column: 1 / -1; }
+  .badge-row{ display:flex; gap:8px; align-items:center; margin-bottom: 10px; flex-wrap:wrap; }
+
+  .manage-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .manage-col h3{ margin: 0 0 8px; font-size: 15px; }
+  .manage-col ul{ list-style:none; padding:0; margin: 10px 0 0; }
+  .manage-col li{
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 6px 8px; border-bottom: 1px solid var(--line-soft); font-size: 13.5px;
+  }
+  .manage-col li button{ background:none; border:none; color: var(--brick); cursor:pointer; font-size: 12px; }
+  .manage-add{ display:flex; gap:6px; margin-top: 4px; }
+  .manage-add input{ flex:1; border:1px solid var(--line); padding: 6px 8px; }
+
+  .overlay{
+    position: fixed; inset:0; background: rgba(43,36,29,.45);
+    display:flex; align-items:center; justify-content:center; z-index: 50; padding: 20px;
+  }
+  .modal{
+    background: var(--surface); border: 1px solid var(--line);
+    max-width: 560px; width:100%; max-height: 90vh; overflow:auto; padding: 22px 24px;
+  }
+  .modal h2{ margin-top:0; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:8px; margin-top: 18px; }
+
+  .photo-grid{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .photo-thumb{ position:relative; width:84px; height:84px; }
+  .photo-thumb img{
+    width:100%; height:100%; object-fit:cover; border:1px solid var(--line); cursor:zoom-in;
+  }
+  .photo-thumb button{
+    position:absolute; top:-7px; right:-7px; width:20px; height:20px; padding:0;
+    border-radius:50%; background: var(--brick); color:#fff; border:none;
+    cursor:pointer; font-size:13px; line-height:1;
+  }
+  .photo-status{ font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; }
+
+  .empty-state{ text-align:center; padding: 40px 20px; color: var(--ink-soft); }
+  .empty-state strong{ display:block; color: var(--ink); font-size: 16px; margin-bottom: 6px; }
+
+  @media print{
+    header.app-header, .no-print{ display:none !important; }
+    body{ background:#fff; }
+    main{ padding:0; max-width:none; }
+    .card{ border:none; padding:0; }
+    table{ font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="title-row">
+    <h1>Wood RMA Tracker</h1>
+    <span id="connStatus" class="conn-status connecting">Connecting…</span>
+  </div>
+  <p class="subtitle">Amendola Industries — logging returned wood stock and what's reusable for future orders</p>
+  <nav class="tabs">
+    <button data-tab="import" class="active">Import RMA</button>
+    <button data-tab="inventory">Inventory</button>
+    <button data-tab="manage">Manage sub-types</button>
+  </nav>
+</header>
+
+<main>
+
+  <div class="card" id="configWarning" style="display:none; border-color:var(--brick);">
+    <h2>Firebase isn't connected yet</h2>
+    <p class="hint">Open this file and find the <code>firebaseConfig</code> object near the top of the script. Paste in the values from your Firebase console (Project settings → Your apps → SDK setup and configuration). Nothing will load or save until that's done.</p>
+  </div>
+
+  <!-- IMPORT PANEL -->
+  <section class="panel active" id="panel-import">
+    <div class="card" id="migrateBanner" style="display:none; border-color: var(--amber);">
+      <h2>Found data saved on this device</h2>
+      <p class="hint">This browser has <span class="count">0</span> item(s) saved from before this app connected to Firebase. Import them into the shared tracker so nothing's lost — photos on those items will carry over too.</p>
+      <button class="btn" id="migrateBtn">Import into shared tracker</button>
+    </div>
+
+    <div class="card">
+      <h2>Import an RMA CSV</h2>
+      <p class="hint">Upload the CSV exported from Sage 100's Open RMA Report — one RMA per file.</p>
+      <div class="drop-zone" id="dropZone">
+        <strong>Drop the RMA CSV here</strong><br>
+        or click to browse
+        <input type="file" id="fileInput" accept=".csv" style="display:none">
+      </div>
+      <div id="importError" class="hint" style="color:var(--brick); display:none; margin-top:10px;"></div>
+    </div>
+
+    <div class="card" id="previewCard" style="display:none;">
+      <h2>Review before saving</h2>
+      <p class="hint">Category and sub-type are auto-suggested from the description — adjust anything before it's added to inventory.</p>
+      <div id="duplicateNotice" class="hint" style="display:none; color:var(--amber); font-weight:600;"></div>
+
+      <div class="import-grid">
+        <div class="field"><label>RMA Number</label><input id="p_rmaNumber" readonly></div>
+        <div class="field"><label>RMA Date</label><input id="p_rmaDate" readonly></div>
+        <div class="field"><label>Customer</label><input id="p_customer" readonly></div>
+        <div class="field"><label>Item Number</label><input id="p_itemNumber" readonly></div>
+        <div class="field full"><label>Description</label><input id="p_description" readonly></div>
+
+        <div class="field">
+          <label>Category</label>
+          <select id="p_category">
+            <option value="Fence">Fence</option>
+            <option value="Gate">Gate</option>
+            <option value="Post">Post</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Sub-type</label>
+          <select id="p_subType"><option value="">— Select —</option></select>
+        </div>
+
+        <div class="field"><label>Return qty</label><input id="p_returnQty" readonly></div>
+        <div class="field"><label>Received qty</label><input id="p_receivedQty" readonly></div>
+        <div class="field"><label>Remaining (open) qty</label><input id="p_remainingQty" readonly></div>
+        <div class="field"><label>Warehouse</label><input id="p_warehouse" readonly></div>
+
+        <div class="field"><label>Price</label><input id="p_price" readonly></div>
+        <div class="field"><label>Extension</label><input id="p_extension" readonly></div>
+        <div class="field"><label>Reason</label><input id="p_reason" readonly></div>
+        <div class="field"><label>Item action</label><input id="p_itemAction" readonly></div>
+
+        <div class="field">
+          <label>Status in tracker</label>
+          <select id="p_status">
+            <option value="awaiting">Awaiting receipt</option>
+            <option value="storage">Received – in storage</option>
+          </select>
+        </div>
+        <div class="field"><label>Location / bin (optional)</label><input id="p_location" placeholder="e.g. Wood rack B3"></div>
+
+        <div class="field full"><label>Notes</label><textarea id="p_notes" rows="2"></textarea></div>
+      </div>
+
+      <div class="modal-actions" style="justify-content:flex-start;">
+        <button class="btn" id="saveRecordBtn">Add to inventory</button>
+        <button class="btn secondary" id="cancelPreviewBtn">Cancel</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- INVENTORY PANEL -->
+  <section class="panel" id="panel-inventory">
+    <div class="stat-strip">
+      <div class="stat-block fence"><div class="num" id="stat-fence">0</div><div class="lbl">Fence in storage</div></div>
+      <div class="stat-block gate"><div class="num" id="stat-gate">0</div><div class="lbl">Gate in storage</div></div>
+      <div class="stat-block post"><div class="num" id="stat-post">0</div><div class="lbl">Post in storage</div></div>
+      <div class="stat-block value"><div class="num" id="stat-value">$0</div><div class="lbl">Value in storage</div></div>
+      <div class="stat-block reused"><div class="num" id="stat-value-reused">$0</div><div class="lbl">Value reused</div></div>
+      <div class="stat-block scrapped"><div class="num" id="stat-value-scrapped">$0</div><div class="lbl">Value scrapped</div></div>
+    </div>
+
+    <div class="card">
+      <div class="filter-row no-print">
+        <div class="field">
+          <label>Category</label>
+          <select id="f_category">
+            <option value="">All</option>
+            <option>Fence</option><option>Gate</option><option>Post</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Sub-type</label>
+          <select id="f_subType"><option value="">All</option></select>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="f_status">
+            <option value="">All</option>
+            <option value="awaiting">Awaiting receipt</option>
+            <option value="storage">In storage</option>
+            <option value="reused">Reused</option>
+            <option value="scrapped">Scrapped</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Search (RMA#, item#, customer, description)</label>
+          <input id="f_search" placeholder="Start typing…">
+        </div>
+        <div class="field">
+          <button class="btn secondary" id="clearFiltersBtn">Clear filters</button>
+        </div>
+        <div class="field" style="margin-left:auto;">
+          <button class="btn secondary" id="printBtn">Print / save PDF</button>
+        </div>
+      </div>
+
+      <table id="inventoryTable">
+        <thead>
+          <tr>
+            <th data-sort="rmaNumber">RMA #</th>
+            <th data-sort="rmaDate">Date</th>
+            <th data-sort="customerName">Customer</th>
+            <th data-sort="itemNumber">Item #</th>
+            <th data-sort="description">Description</th>
+            <th data-sort="category">Category</th>
+            <th data-sort="subType">Sub-type</th>
+            <th data-sort="qtyOnHand">Qty</th>
+            <th data-sort="status">Status</th>
+            <th data-sort="location">Location</th>
+            <th class="no-print">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="inventoryBody"></tbody>
+      </table>
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <strong>Nothing logged yet</strong>
+        Import an RMA CSV to start tracking what's come back to the Wood Department.
+      </div>
+    </div>
+  </section>
+
+  <!-- MANAGE PANEL -->
+  <section class="panel" id="panel-manage">
+    <div class="card">
+      <h2>Sub-type lists</h2>
+      <p class="hint">These populate the sub-type suggestions when importing or editing an item. Add the styles you actually use so the list stays clean and consistent.</p>
+      <div class="manage-grid">
+        <div class="manage-col">
+          <h3>Fence</h3>
+          <div class="manage-add"><input id="add_Fence" placeholder="e.g. Spaced Picket"><button class="btn small" data-add="Fence">Add</button></div>
+          <ul id="list_Fence"></ul>
+        </div>
+        <div class="manage-col">
+          <h3>Gate</h3>
+          <div class="manage-add"><input id="add_Gate" placeholder="e.g. Square Lattice"><button class="btn small" data-add="Gate">Add</button></div>
+          <ul id="list_Gate"></ul>
+        </div>
+        <div class="manage-col">
+          <h3>Post</h3>
+          <div class="manage-add"><input id="add_Post" placeholder="e.g. 4x4 Cedar"><button class="btn small" data-add="Post">Add</button></div>
+          <ul id="list_Post"></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div class="overlay no-print" id="editOverlay" style="display:none;">
+  <div class="modal">
+    <h2>Edit item</h2>
+    <div class="import-grid">
+      <div class="field"><label>RMA / Item</label><input id="e_ref" readonly></div>
+      <div class="field">
+        <label>Category</label>
+        <select id="e_category"><option>Fence</option><option>Gate</option><option>Post</option></select>
+      </div>
+      <div class="field full"><label>Sub-type</label><select id="e_subType"><option value="">— Select —</option></select></div>
+      <div class="field">
+        <label>Status</label>
+        <select id="e_status">
+          <option value="awaiting">Awaiting receipt</option>
+          <option value="storage">Received – in storage</option>
+          <option value="reused">Reused</option>
+          <option value="scrapped">Scrapped</option>
+        </select>
+      </div>
+      <div class="field"><label>Qty on hand</label><input id="e_qty" type="number" min="0" step="1"></div>
+      <div class="field"><label>Reused on SO # (if applicable)</label><input id="e_reusedSO"></div>
+      <div class="field"><label>Location / bin</label><input id="e_location"></div>
+      <div class="field full"><label>Notes</label><textarea id="e_notes" rows="3"></textarea></div>
+      <div class="field full">
+        <label>Photos</label>
+        <input type="file" id="e_photoInput" accept="image/*" multiple>
+        <p class="hint" style="margin: 4px 0 0;">Photos are resized and compressed automatically, then saved with the item right away — no separate save step needed for these. A few per item is plenty; Firestore caps how much one item can hold.</p>
+        <div id="e_photoGrid" class="photo-grid"></div>
+        <div id="e_photoStatus" class="photo-status"></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn danger" id="deleteRecordBtn">Delete item</button>
+      <button class="btn secondary" id="cancelEditBtn">Cancel</button>
+      <button class="btn" id="saveEditBtn">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<script>
+(function(){
+  "use strict";
+
+  // ================= FIREBASE CONFIG =================
+  // Paste your project's values here (Firebase console → Project settings →
+  // Your apps → SDK setup and configuration). These values aren't secret —
+  // a Firebase app is protected by the security rules you set in the
+  // console, not by hiding this object.
+  const firebaseConfig = {
+    apiKey: "AIzaSyDxDaBmpoJOR4e5wvjmgJZSIeu5qcYnzSQ",
+    authDomain: "aii-wood-rma-tracker.firebaseapp.com",
+    projectId: "aii-wood-rma-tracker",
+    storageBucket: "aii-wood-rma-tracker.firebasestorage.app",
+    messagingSenderId: "189555376771",
+    appId: "1:189555376771:web:c387828b69232c1b2391b6"
+  };
+  const CONFIG_MISSING = firebaseConfig.apiKey.indexOf('PASTE_') === 0;
+
+  const RECORDS_COL = 'rmaRecords';
+  const SUBTYPES_COL = 'config';
+  const SUBTYPES_DOC = 'subtypes';
+  const DEFAULT_SUBTYPES = { Fence: [], Gate: [], Post: [] };
+  const LEGACY_RECORDS_KEY = 'aii_wood_rma_records_v1';
+  const LEGACY_SUBTYPES_KEY = 'aii_wood_rma_subtypes_v1';
+
+  let db = null, auth = null;
+  let records = [];
+  let subTypes = DEFAULT_SUBTYPES;
+  let pendingRecord = null; // parsed-but-not-yet-saved record from Import
+  let editingId = null;
+  let editingPhotos = []; // base64 JPEG strings while the edit modal is open
+  let sortKey = 'rmaDate', sortDir = -1;
+
+  // Firestore caps a document at 1 MiB. Leave headroom under that for the
+  // record's other fields so a photo-heavy item doesn't fail to save.
+  const MAX_PHOTOS_BYTES = 900 * 1024;
+
+  const connStatus = document.getElementById('connStatus');
+
+  function setStatus(text, cls){
+    connStatus.textContent = text;
+    connStatus.className = 'conn-status ' + cls;
+  }
+
+  if(CONFIG_MISSING){
+    setStatus('Not connected', 'offline');
+    document.getElementById('configWarning').style.display = 'block';
+  } else {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    auth = firebase.auth();
+    connect();
+  }
+
+  function connect(){
+    auth.signInAnonymously().catch(err=>{
+      setStatus('Connection error', 'offline');
+      console.error(err);
+    });
+    auth.onAuthStateChanged(user=>{
+      if(user){
+        setStatus('Live', 'online');
+        attachListeners();
+        checkForLegacyData();
+      }
+    });
+  }
+
+  function attachListeners(){
+    db.collection(RECORDS_COL).onSnapshot(snap=>{
+      records = snap.docs.map(d => Object.assign({id: d.id}, d.data()));
+      renderInventory();
+    }, err=>{
+      setStatus('Sync error — check rules', 'offline');
+      console.error(err);
+    });
+
+    db.collection(SUBTYPES_COL).doc(SUBTYPES_DOC).onSnapshot(doc=>{
+      subTypes = doc.exists ? Object.assign({}, DEFAULT_SUBTYPES, doc.data()) : DEFAULT_SUBTYPES;
+      renderManage();
+      updateSubTypeFilterOptions();
+    }, err=>{
+      setStatus('Sync error — check rules', 'offline');
+      console.error(err);
+    });
+  }
+
+  // ---------- One-time migration from the old localStorage version ----------
+  function checkForLegacyData(){
+    const banner = document.getElementById('migrateBanner');
+    let legacy = [];
+    try{ legacy = JSON.parse(localStorage.getItem(LEGACY_RECORDS_KEY) || '[]'); }catch(e){}
+    if(legacy.length){
+      banner.style.display = 'block';
+      banner.querySelector('.count').textContent = legacy.length;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  document.getElementById('migrateBtn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('migrateBtn');
+    let legacyRecords = [], legacySubTypes = {};
+    try{ legacyRecords = JSON.parse(localStorage.getItem(LEGACY_RECORDS_KEY) || '[]'); }catch(e){}
+    try{ legacySubTypes = JSON.parse(localStorage.getItem(LEGACY_SUBTYPES_KEY) || '{}'); }catch(e){}
+    btn.disabled = true; btn.textContent = 'Importing…';
+    try{
+      for(const rec of legacyRecords){
+        const copy = Object.assign({}, rec);
+        delete copy.id;
+        copy.photos = rec.photos || []; // old photos are already plain compressed base64 — compatible as-is
+        await db.collection(RECORDS_COL).add(copy);
+      }
+      const merged = Object.assign({}, DEFAULT_SUBTYPES, legacySubTypes);
+      await db.collection(SUBTYPES_COL).doc(SUBTYPES_DOC).set(merged, {merge:true});
+      localStorage.removeItem(LEGACY_RECORDS_KEY);
+      localStorage.removeItem(LEGACY_SUBTYPES_KEY);
+      document.getElementById('migrateBanner').style.display = 'none';
+      alert('Imported ' + legacyRecords.length + ' item(s).');
+    }catch(err){
+      alert('Import failed: ' + err.message);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Import into shared tracker';
+    }
+  });
+
+  // ---------- Tabs ----------
+  document.querySelectorAll('nav.tabs button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+      if(btn.dataset.tab === 'inventory') renderInventory();
+      if(btn.dataset.tab === 'manage') renderManage();
+    });
+  });
+
+  // ---------- CSV parsing (handles quoted fields with embedded newlines/commas) ----------
+  function parseCSV(text){
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    for(let i=0; i<text.length; i++){
+      const c = text[i];
+      if(inQuotes){
+        if(c === '"'){
+          if(text[i+1] === '"'){ field += '"'; i++; }
+          else{ inQuotes = false; }
+        } else { field += c; }
+      } else {
+        if(c === '"'){ inQuotes = true; }
+        else if(c === ','){ row.push(field); field=''; }
+        else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+        else if(c === '\r'){ /* skip, \n handles the break */ }
+        else { field += c; }
+      }
+    }
+    row.push(field); rows.push(row);
+    return rows;
+  }
+
+  // The Sage 100 "Open RMA Report" export flattens its title, headers, and the
+  // single RMA line into one long row. Rather than trust absolute column
+  // numbers (which can shift if the report layout changes slightly), we
+  // anchor on the literal label text Sage prints ("Status:", "Reason:", etc.)
+  // and read the next field over as the value. If AII's report template ever
+  // changes, fixing these anchors is the first place to look.
+  function extractRmaFields(fields){
+    const idx = fields.indexOf('Status:');
+    if(idx === -1) return null;
+
+    const at = (offset) => (fields[idx+offset] || '').toString().trim();
+    const byLabel = (label) => {
+      const i = fields.indexOf(label);
+      return i === -1 ? '' : (fields[i+1] || '').toString().trim();
+    };
+    const totalIdx = fields.findIndex(f => /^RMA .+ Total:$/.test(f));
+
+    return {
+      rmaNumber: at(-7),
+      rmaDate: at(-6),
+      customerCode: at(-4),
+      customerName: at(-3),
+      sourceStatus: at(1),
+      expireDate: byLabel('Expire Date:'),
+      itemNumber: at(6),
+      description: at(7),
+      crossShip: at(8),
+      warehouse: at(9),
+      um: at(10),
+      returnQty: parseFloat(at(11)) || 0,
+      receivedQty: parseFloat(at(12)) || 0,
+      remainingQty: parseFloat(at(13)) || 0,
+      price: parseFloat(at(14)) || 0,
+      extension: parseFloat(at(15)) || 0,
+      originalInvoice: byLabel('Original Invoice:'),
+      salesperson: byLabel('Salesperson:'),
+      reason: byLabel('Reason:'),
+      itemAction: byLabel('Item Action:'),
+      customerAction: byLabel('Customer Action:'),
+      restockingCharge: byLabel('Restocking Charge:'),
+      rmaTotal: totalIdx === -1 ? '' : (fields[totalIdx+1] || '').trim(),
+      comment: findComment(fields, idx)
+    };
+  }
+
+  // The free-text comment field has no label of its own — it's the last
+  // meaningful chunk of text before the "RMA ... Total:" marker.
+  function findComment(fields, statusIdx){
+    const totalIdx = fields.findIndex(f => /^RMA .+ Total:$/.test(f));
+    const searchEnd = totalIdx === -1 ? fields.length : totalIdx;
+    for(let i = searchEnd - 1; i > statusIdx; i--){
+      const v = (fields[i] || '').trim();
+      if(v && !/:$/.test(v)) return v;
+    }
+    return '';
+  }
+
+  function detectCategory(description){
+    const d = (description || '').toUpperCase();
+    if(/\bGATE\b/.test(d)) return 'Gate';
+    if(/\bPOST\b/.test(d)) return 'Post';
+    return 'Fence';
+  }
+
+  // ---------- Import flow ----------
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const importError = document.getElementById('importError');
+
+  dropZone.addEventListener('click', ()=> fileInput.click());
+  dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', ()=> dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e=>{
+    e.preventDefault(); dropZone.classList.remove('drag');
+    if(e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', e=>{
+    if(e.target.files[0]) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file){
+    importError.style.display = 'none';
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const rows = parseCSV(reader.result);
+        const fields = rows.flat();
+        const parsed = extractRmaFields(fields);
+        if(!parsed || !parsed.rmaNumber || !parsed.itemNumber){
+          throw new Error('Could not find an RMA number and item on this file. Make sure it\'s the Open RMA Report export.');
+        }
+        openPreview(parsed);
+      }catch(err){
+        importError.textContent = err.message;
+        importError.style.display = 'block';
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function openPreview(parsed){
+    const category = detectCategory(parsed.description);
+    pendingRecord = Object.assign({}, parsed, {
+      category, subType: '',
+      status: parsed.remainingQty > 0 ? 'awaiting' : 'storage',
+      qtyOnHand: parsed.remainingQty > 0 ? parsed.returnQty : parsed.receivedQty,
+      location: '', notes: parsed.comment || '', reusedSO: ''
+    });
+
+    document.getElementById('p_rmaNumber').value = parsed.rmaNumber;
+    document.getElementById('p_rmaDate').value = parsed.rmaDate;
+    document.getElementById('p_customer').value = parsed.customerName + (parsed.customerCode ? ' ('+parsed.customerCode+')' : '');
+    document.getElementById('p_itemNumber').value = parsed.itemNumber;
+    document.getElementById('p_description').value = parsed.description;
+    document.getElementById('p_category').value = category;
+    document.getElementById('p_returnQty').value = parsed.returnQty;
+    document.getElementById('p_receivedQty').value = parsed.receivedQty;
+    document.getElementById('p_remainingQty').value = parsed.remainingQty;
+    document.getElementById('p_warehouse').value = parsed.warehouse;
+    document.getElementById('p_price').value = parsed.price.toFixed(2);
+    document.getElementById('p_extension').value = parsed.extension.toFixed(2);
+    document.getElementById('p_reason').value = parsed.reason;
+    document.getElementById('p_itemAction').value = parsed.itemAction;
+    document.getElementById('p_status').value = pendingRecord.status;
+    document.getElementById('p_location').value = '';
+    document.getElementById('p_notes').value = parsed.comment || '';
+
+    fillSubTypeList('p_subType', category);
+
+    const dup = records.find(r => r.rmaNumber === parsed.rmaNumber && r.itemNumber === parsed.itemNumber);
+    const notice = document.getElementById('duplicateNotice');
+    if(dup){
+      notice.style.display = 'block';
+      notice.textContent = 'This RMA/item is already in inventory (logged ' + new Date(dup.loggedAt).toLocaleDateString() + '). Saving will update that existing record instead of creating a duplicate.';
+    } else {
+      notice.style.display = 'none';
+    }
+
+    document.getElementById('previewCard').style.display = 'block';
+    document.getElementById('previewCard').scrollIntoView({behavior:'smooth'});
+  }
+
+  document.getElementById('p_category').addEventListener('change', e=>{
+    fillSubTypeList('p_subType', e.target.value);
+  });
+
+  document.getElementById('cancelPreviewBtn').addEventListener('click', ()=>{
+    document.getElementById('previewCard').style.display = 'none';
+    fileInput.value = '';
+    pendingRecord = null;
+  });
+
+  document.getElementById('saveRecordBtn').addEventListener('click', async ()=>{
+    if(!pendingRecord || !db) return;
+    const category = document.getElementById('p_category').value;
+    const subType = document.getElementById('p_subType').value.trim();
+    const record = Object.assign({}, pendingRecord, {
+      category,
+      subType,
+      status: document.getElementById('p_status').value,
+      location: document.getElementById('p_location').value.trim(),
+      notes: document.getElementById('p_notes').value.trim(),
+      photos: []
+    });
+    delete record.id;
+
+    const existing = records.find(r => r.rmaNumber === record.rmaNumber && r.itemNumber === record.itemNumber);
+    const saveBtn = document.getElementById('saveRecordBtn');
+    saveBtn.disabled = true;
+    try{
+      if(existing){
+        record.photos = existing.photos || [];
+        record.loggedAt = existing.loggedAt || Date.now();
+        await db.collection(RECORDS_COL).doc(existing.id).set(record);
+      } else {
+        record.loggedAt = Date.now();
+        await db.collection(RECORDS_COL).add(record);
+      }
+      document.getElementById('previewCard').style.display = 'none';
+      fileInput.value = '';
+      pendingRecord = null;
+      document.querySelector('nav.tabs button[data-tab="inventory"]').click();
+    }catch(err){
+      alert('Could not save: ' + err.message);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+
+  // ---------- Sub-type management ----------
+  // Sub-type is always chosen from the list built on the Manage tab — never
+  // typed or guessed here — so Gabriel controls exactly which sub-items exist.
+  function fillSubTypeList(selectId, category){
+    const sel = document.getElementById(selectId);
+    const hasOptions = (subTypes[category] || []).length > 0;
+    sel.innerHTML = hasOptions
+      ? '<option value="">— Select —</option>'
+      : '<option value="">No sub-types yet — add one in Manage</option>';
+    (subTypes[category] || []).slice().sort().forEach(st=>{
+      const opt = document.createElement('option');
+      opt.value = st;
+      opt.textContent = st;
+      sel.appendChild(opt);
+    });
+  }
+
+  function addSubType(category, value){
+    if(!db) return;
+    const updated = Object.assign({}, DEFAULT_SUBTYPES, subTypes);
+    if(!updated[category]) updated[category] = [];
+    if(updated[category].some(s => s.toLowerCase() === value.toLowerCase())) return;
+    updated[category] = updated[category].concat([value]);
+    db.collection(SUBTYPES_COL).doc(SUBTYPES_DOC).set(updated, {merge:true}).catch(err=>{
+      alert('Could not save sub-type: ' + err.message);
+    });
+  }
+
+  function removeSubType(category, value){
+    if(!db) return;
+    const updated = Object.assign({}, DEFAULT_SUBTYPES, subTypes);
+    updated[category] = (updated[category] || []).filter(s => s !== value);
+    db.collection(SUBTYPES_COL).doc(SUBTYPES_DOC).set(updated, {merge:true}).catch(err=>{
+      alert('Could not remove sub-type: ' + err.message);
+    });
+  }
+
+  function renderManage(){
+    ['Fence','Gate','Post'].forEach(cat=>{
+      const ul = document.getElementById('list_'+cat);
+      ul.innerHTML = '';
+      (subTypes[cat] || []).slice().sort().forEach(st=>{
+        const li = document.createElement('li');
+        const span = document.createElement('span');
+        span.textContent = st;
+        const del = document.createElement('button');
+        del.textContent = 'Remove';
+        del.addEventListener('click', ()=> removeSubType(cat, st));
+        li.appendChild(span); li.appendChild(del);
+        ul.appendChild(li);
+      });
+      if(!(subTypes[cat] || []).length){
+        const li = document.createElement('li');
+        li.innerHTML = '<span class="muted">None yet</span>';
+        ul.appendChild(li);
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-add]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cat = btn.dataset.add;
+      const input = document.getElementById('add_'+cat);
+      const val = input.value.trim();
+      if(val){ addSubType(cat, val); input.value=''; }
+    });
+  });
+
+  // ---------- Inventory rendering ----------
+  const STATUS_LABELS = { awaiting:'Awaiting receipt', storage:'In storage', reused:'Reused', scrapped:'Scrapped' };
+
+  function currentFilters(){
+    return {
+      category: document.getElementById('f_category').value,
+      subType: document.getElementById('f_subType').value,
+      status: document.getElementById('f_status').value,
+      search: document.getElementById('f_search').value.trim().toLowerCase()
+    };
+  }
+
+  function filteredRecords(){
+    const f = currentFilters();
+    return records.filter(r=>{
+      if(f.category && r.category !== f.category) return false;
+      if(f.subType && r.subType !== f.subType) return false;
+      if(f.status && r.status !== f.status) return false;
+      if(f.search){
+        const hay = [r.rmaNumber, r.itemNumber, r.customerName, r.description].join(' ').toLowerCase();
+        if(!hay.includes(f.search)) return false;
+      }
+      return true;
+    });
+  }
+
+  function updateSubTypeFilterOptions(){
+    const cat = document.getElementById('f_category').value;
+    const sel = document.getElementById('f_subType');
+    const current = sel.value;
+    const pool = cat ? (subTypes[cat] || []) : Object.values(subTypes).flat();
+    sel.innerHTML = '<option value="">All</option>' +
+      Array.from(new Set(pool)).sort().map(s=>`<option ${s===current?'selected':''}>${escapeHtml(s)}</option>`).join('');
+  }
+
+  function escapeHtml(s){
+    return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function renderStats(){
+    const inStorage = records.filter(r=>r.status==='storage');
+    const qtyFor = (cat) => inStorage.filter(r=>r.category===cat).reduce((sum,r)=> sum + (r.qtyOnHand || 0), 0);
+    document.getElementById('stat-fence').textContent = qtyFor('Fence');
+    document.getElementById('stat-gate').textContent = qtyFor('Gate');
+    document.getElementById('stat-post').textContent = qtyFor('Post');
+
+    const valueFor = (status) => records.filter(r=>r.status===status).reduce((sum,r)=> sum + (r.extension || 0), 0);
+    const fmt = (n) => '$' + n.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('stat-value').textContent = fmt(valueFor('storage'));
+    document.getElementById('stat-value-reused').textContent = fmt(valueFor('reused'));
+    document.getElementById('stat-value-scrapped').textContent = fmt(valueFor('scrapped'));
+  }
+
+  function renderInventory(){
+    updateSubTypeFilterOptions();
+    renderStats();
+    let list = filteredRecords();
+    list.sort((a,b)=>{
+      let av = a[sortKey], bv = b[sortKey];
+      if(sortKey === 'rmaDate'){ av = new Date(av || 0).getTime(); bv = new Date(bv || 0).getTime(); }
+      if(typeof av === 'string') av = av.toLowerCase();
+      if(typeof bv === 'string') bv = bv.toLowerCase();
+      if(av < bv) return -1*sortDir;
+      if(av > bv) return 1*sortDir;
+      return 0;
+    });
+
+    const body = document.getElementById('inventoryBody');
+    body.innerHTML = '';
+    document.getElementById('emptyState').style.display = list.length ? 'none' : 'block';
+
+    list.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.rmaNumber)}</td>
+        <td>${escapeHtml(r.rmaDate)}</td>
+        <td>${escapeHtml(r.customerName)}</td>
+        <td>${escapeHtml(r.itemNumber)}</td>
+        <td class="desc-cell">${escapeHtml(r.description)}</td>
+        <td>${escapeHtml(r.category)}</td>
+        <td>${escapeHtml(r.subType) || '<span class="muted">—</span>'}</td>
+        <td>${r.qtyOnHand ?? ''} ${escapeHtml(r.um||'')}</td>
+        <td><span class="chip ${r.status}">${STATUS_LABELS[r.status]}</span></td>
+        <td>${escapeHtml(r.location) || '<span class="muted">—</span>'}</td>
+        <td class="actions-cell no-print"><button class="btn small secondary" data-edit="${r.id}">Edit</button></td>
+      `;
+      body.appendChild(tr);
+    });
+
+    body.querySelectorAll('[data-edit]').forEach(btn=>{
+      btn.addEventListener('click', ()=> openEdit(btn.dataset.edit));
+    });
+  }
+
+  document.querySelectorAll('#inventoryTable thead th[data-sort]').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.dataset.sort;
+      if(sortKey === key){ sortDir *= -1; } else { sortKey = key; sortDir = 1; }
+      renderInventory();
+    });
+  });
+
+  ['f_category','f_status'].forEach(id=>{
+    document.getElementById(id).addEventListener('change', renderInventory);
+  });
+  document.getElementById('f_category').addEventListener('change', updateSubTypeFilterOptions);
+  document.getElementById('f_subType').addEventListener('change', renderInventory);
+  document.getElementById('f_search').addEventListener('input', renderInventory);
+  document.getElementById('clearFiltersBtn').addEventListener('click', ()=>{
+    document.getElementById('f_category').value = '';
+    document.getElementById('f_subType').value = '';
+    document.getElementById('f_status').value = '';
+    document.getElementById('f_search').value = '';
+    renderInventory();
+  });
+  document.getElementById('printBtn').addEventListener('click', ()=> window.print());
+
+  // ---------- Photos (Firebase Storage) ----------
+  // Resizes to a max dimension and re-encodes as JPEG before upload, so a
+  // multi-MB phone photo becomes a small file in Storage.
+  function compressImage(file, maxDim, quality){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          let { width, height } = img;
+          if(width > height){ if(width > maxDim){ height = Math.round(height * maxDim / width); width = maxDim; } }
+          else { if(height > maxDim){ width = Math.round(width * maxDim / height); height = maxDim; } }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => reject(new Error('Could not read that image.'));
+        img.src = reader.result;
+      };
+      reader.onerror = () => reject(new Error('Could not read that file.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderPhotoGrid(){
+    const grid = document.getElementById('e_photoGrid');
+    grid.innerHTML = '';
+    editingPhotos.forEach((photoDataUrl, i)=>{
+      const div = document.createElement('div');
+      div.className = 'photo-thumb';
+      const img = document.createElement('img');
+      img.src = photoDataUrl;
+      img.title = 'Click to view full size';
+      img.addEventListener('click', ()=>{
+        const w = window.open('');
+        if(w) w.document.write('<img src="'+photoDataUrl+'" style="max-width:100%;">');
+      });
+      const del = document.createElement('button');
+      del.textContent = '\u00d7';
+      del.title = 'Remove photo';
+      del.addEventListener('click', ()=> removePhoto(i));
+      div.appendChild(img); div.appendChild(del);
+      grid.appendChild(div);
+    });
+  }
+
+  function photosBytes(photos){
+    return photos.reduce((sum, p) => sum + p.length, 0); // base64 length ≈ bytes stored
+  }
+
+  async function removePhoto(i){
+    if(!editingId || !db) return;
+    editingPhotos.splice(i, 1);
+    renderPhotoGrid();
+    const statusEl = document.getElementById('e_photoStatus');
+    statusEl.textContent = 'Removing photo…';
+    try{
+      await db.collection(RECORDS_COL).doc(editingId).update({ photos: editingPhotos.slice() });
+      statusEl.textContent = '';
+    }catch(err){
+      statusEl.textContent = 'Could not remove: ' + err.message;
+    }
+  }
+
+  document.getElementById('e_photoInput').addEventListener('change', async (e)=>{
+    const files = Array.from(e.target.files);
+    e.target.value = '';
+    if(!editingId || !db) return;
+    const statusEl = document.getElementById('e_photoStatus');
+    for(const file of files){
+      statusEl.textContent = 'Compressing photo…';
+      try{
+        const dataUrl = await compressImage(file, 900, 0.6);
+        if(photosBytes(editingPhotos) + dataUrl.length > MAX_PHOTOS_BYTES){
+          alert('This item already has enough photos to fill Firestore\'s per-item storage limit. Remove one before adding another.');
+          break;
+        }
+        editingPhotos.push(dataUrl);
+        statusEl.textContent = 'Saving…';
+        await db.collection(RECORDS_COL).doc(editingId).update({ photos: editingPhotos.slice() });
+      }catch(err){
+        alert('Could not save photo: ' + err.message);
+      }
+    }
+    statusEl.textContent = '';
+    renderPhotoGrid();
+  });
+
+  // ---------- Edit modal ----------
+  function openEdit(id){
+    const r = records.find(x=>x.id===id);
+    if(!r) return;
+    editingId = id;
+    document.getElementById('e_ref').value = r.rmaNumber + ' / ' + r.itemNumber;
+    document.getElementById('e_category').value = r.category;
+    fillSubTypeList('e_subType', r.category);
+    document.getElementById('e_subType').value = r.subType || '';
+    document.getElementById('e_status').value = r.status;
+    document.getElementById('e_qty').value = r.qtyOnHand || 0;
+    document.getElementById('e_reusedSO').value = r.reusedSO || '';
+    document.getElementById('e_location').value = r.location || '';
+    document.getElementById('e_notes').value = r.notes || '';
+    document.getElementById('e_photoStatus').textContent = '';
+    editingPhotos = (r.photos || []).slice();
+    renderPhotoGrid();
+    document.getElementById('editOverlay').style.display = 'flex';
+  }
+  document.getElementById('e_category').addEventListener('change', e=>{
+    fillSubTypeList('e_subType', e.target.value);
+  });
+  document.getElementById('cancelEditBtn').addEventListener('click', ()=>{
+    document.getElementById('editOverlay').style.display = 'none';
+    editingId = null;
+    editingPhotos = [];
+  });
+  document.getElementById('saveEditBtn').addEventListener('click', async ()=>{
+    if(!editingId || !db) return;
+    const updates = {
+      category: document.getElementById('e_category').value,
+      subType: document.getElementById('e_subType').value.trim(),
+      status: document.getElementById('e_status').value,
+      qtyOnHand: parseFloat(document.getElementById('e_qty').value) || 0,
+      reusedSO: document.getElementById('e_reusedSO').value.trim(),
+      location: document.getElementById('e_location').value.trim(),
+      notes: document.getElementById('e_notes').value.trim()
+    };
+    const btn = document.getElementById('saveEditBtn');
+    btn.disabled = true;
+    try{
+      await db.collection(RECORDS_COL).doc(editingId).update(updates);
+      document.getElementById('editOverlay').style.display = 'none';
+      editingId = null;
+      editingPhotos = [];
+    }catch(err){
+      alert('Could not save: ' + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  document.getElementById('deleteRecordBtn').addEventListener('click', async ()=>{
+    if(!editingId || !db) return;
+    if(!confirm('Delete this item from the tracker? This can\'t be undone.')) return;
+    const id = editingId;
+    try{
+      await db.collection(RECORDS_COL).doc(id).delete();
+      document.getElementById('editOverlay').style.display = 'none';
+      editingId = null;
+      editingPhotos = [];
+    }catch(err){
+      alert('Could not delete: ' + err.message);
+    }
+  });
+
+})();
+</script>
+</body>
+</html>
