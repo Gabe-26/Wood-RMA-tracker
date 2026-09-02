@@ -54,6 +54,12 @@
   header.app-header .subtitle{
     margin: 2px 0 18px; color: #cbb894; font-size: 13.5px;
   }
+  .user-badge strong{ color: #f7f1e2; }
+  .link-btn{
+    background:none; border:none; color: inherit; text-decoration: underline;
+    cursor:pointer; font-size: inherit; padding: 0;
+  }
+  .link-btn:hover{ color: #f7f1e2; }
   .conn-status{
     display:inline-block; font-size: 11.5px; padding: 3px 10px; margin-left: 4px;
     border: 1px solid; vertical-align: middle; font-weight:600; border-radius: 2px;
@@ -223,11 +229,14 @@
     <h1>Wood RMA Tracker</h1>
     <span id="connStatus" class="conn-status connecting">Connecting…</span>
   </div>
-  <p class="subtitle">Amendola Industries — logging returned wood stock and what's reusable for future orders</p>
+  <p class="subtitle">Amendola Industries — logging returned wood stock and what's reusable for future orders
+    <span class="user-badge">· Logged in as <strong id="userName">—</strong> · <button id="switchUserBtn" class="link-btn">Switch</button></span>
+  </p>
   <nav class="tabs">
     <button data-tab="import" class="active">Import RMA</button>
     <button data-tab="inventory">Inventory</button>
     <button data-tab="manage">Manage sub-types</button>
+    <button data-tab="activity">Activity log</button>
   </nav>
 </header>
 
@@ -407,13 +416,42 @@
     </div>
   </section>
 
+  <!-- ACTIVITY PANEL -->
+  <section class="panel" id="panel-activity">
+    <div class="card">
+      <h2>Activity log</h2>
+      <p class="hint">Recent actions across the tracker, most recent first. Shows the last 200 entries.</p>
+      <table id="activityTable">
+        <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
+        <tbody id="activityBody"></tbody>
+      </table>
+      <div class="empty-state" id="activityEmpty" style="display:none;">
+        <strong>No activity yet</strong>
+        Actions show up here as people import, edit, and update items.
+      </div>
+    </div>
+  </section>
+
 </main>
+
+<div class="overlay no-print" id="nameOverlay" style="display:none;">
+  <div class="modal" style="max-width:380px;">
+    <h2>Who's using the tracker?</h2>
+    <p class="hint">Just so items can be tracked back to whoever added or changed them — no password needed.</p>
+    <div class="field full"><label>Your name</label><input id="nameInput" placeholder="e.g. Gabriel"></div>
+    <div class="modal-actions">
+      <button class="btn" id="nameSubmitBtn">Continue</button>
+    </div>
+  </div>
+</div>
 
 <div class="overlay no-print" id="editOverlay" style="display:none;">
   <div class="modal">
     <h2>Edit item</h2>
     <div class="import-grid">
       <div class="field"><label>RMA / Item</label><input id="e_ref" readonly></div>
+      <div class="field"><label>Added by</label><input id="e_loggedBy" readonly></div>
+      <div class="field"><label>Last edited by</label><input id="e_lastEditedBy" readonly></div>
       <div class="field">
         <label>Category</label>
         <select id="e_category"><option>Fence</option><option>Gate</option><option>Post</option></select>
@@ -474,9 +512,11 @@
   const RECORDS_COL = 'rmaRecords';
   const SUBTYPES_COL = 'config';
   const SUBTYPES_DOC = 'subtypes';
+  const ACTIVITY_COL = 'activityLog';
   const DEFAULT_SUBTYPES = { Fence: [], Gate: [], Post: [] };
   const LEGACY_RECORDS_KEY = 'aii_wood_rma_records_v1';
   const LEGACY_SUBTYPES_KEY = 'aii_wood_rma_subtypes_v1';
+  const USERNAME_KEY = 'aii_wood_rma_username';
 
   let db = null, auth = null;
   let records = [];
@@ -485,6 +525,7 @@
   let editingId = null;
   let editingPhotos = []; // base64 JPEG strings while the edit modal is open
   let sortKey = 'rmaDate', sortDir = -1;
+  let currentUser = localStorage.getItem(USERNAME_KEY) || '';
 
   // Firestore caps a document at 1 MiB. Leave headroom under that for the
   // record's other fields so a photo-heavy item doesn't fail to save.
@@ -495,6 +536,40 @@
   function setStatus(text, cls){
     connStatus.textContent = text;
     connStatus.className = 'conn-status ' + cls;
+  }
+
+  // ---------- Who's using it (no password — just a label for attribution) ----------
+  function updateUserBadge(){
+    document.getElementById('userName').textContent = currentUser || '—';
+  }
+  function showNameOverlay(){
+    document.getElementById('nameInput').value = currentUser || '';
+    document.getElementById('nameOverlay').style.display = 'flex';
+    document.getElementById('nameInput').focus();
+  }
+  document.getElementById('nameSubmitBtn').addEventListener('click', ()=>{
+    const val = document.getElementById('nameInput').value.trim();
+    if(!val) return;
+    currentUser = val;
+    localStorage.setItem(USERNAME_KEY, val);
+    updateUserBadge();
+    document.getElementById('nameOverlay').style.display = 'none';
+  });
+  document.getElementById('nameInput').addEventListener('keydown', e=>{
+    if(e.key === 'Enter') document.getElementById('nameSubmitBtn').click();
+  });
+  document.getElementById('switchUserBtn').addEventListener('click', showNameOverlay);
+  updateUserBadge();
+  if(!currentUser) showNameOverlay();
+
+  // Every meaningful write also drops a line here so Gabriel can trace who did what.
+  function logActivity(summary){
+    if(!db) return;
+    db.collection(ACTIVITY_COL).add({
+      user: currentUser || 'Unknown',
+      summary,
+      at: Date.now()
+    }).catch(err=> console.error('activity log failed', err));
   }
 
   if(CONFIG_MISSING){
@@ -538,6 +613,27 @@
       setStatus('Sync error — check rules', 'offline');
       console.error(err);
     });
+
+    db.collection(ACTIVITY_COL).orderBy('at', 'desc').limit(200).onSnapshot(snap=>{
+      renderActivity(snap.docs.map(d => d.data()));
+    }, err=>{
+      console.error(err);
+    });
+  }
+
+  function renderActivity(entries){
+    const body = document.getElementById('activityBody');
+    body.innerHTML = '';
+    document.getElementById('activityEmpty').style.display = entries.length ? 'none' : 'block';
+    entries.forEach(e=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(new Date(e.at).toLocaleString())}</td>
+        <td>${escapeHtml(e.user)}</td>
+        <td>${escapeHtml(e.summary)}</td>
+      `;
+      body.appendChild(tr);
+    });
   }
 
   // ---------- One-time migration from the old localStorage version ----------
@@ -564,6 +660,9 @@
         const copy = Object.assign({}, rec);
         delete copy.id;
         copy.photos = rec.photos || []; // old photos are already plain compressed base64 — compatible as-is
+        copy.loggedBy = currentUser || 'Unknown';
+        copy.lastEditedBy = currentUser || 'Unknown';
+        copy.lastEditedAt = Date.now();
         await db.collection(RECORDS_COL).add(copy);
       }
       const merged = Object.assign({}, DEFAULT_SUBTYPES, legacySubTypes);
@@ -571,6 +670,7 @@
       localStorage.removeItem(LEGACY_RECORDS_KEY);
       localStorage.removeItem(LEGACY_SUBTYPES_KEY);
       document.getElementById('migrateBanner').style.display = 'none';
+      logActivity('Imported ' + legacyRecords.length + ' item(s) from a local backup');
       alert('Imported ' + legacyRecords.length + ' item(s).');
     }catch(err){
       alert('Import failed: ' + err.message);
@@ -784,13 +884,19 @@
     const saveBtn = document.getElementById('saveRecordBtn');
     saveBtn.disabled = true;
     try{
+      record.lastEditedBy = currentUser || 'Unknown';
+      record.lastEditedAt = Date.now();
       if(existing){
         record.photos = existing.photos || [];
         record.loggedAt = existing.loggedAt || Date.now();
+        record.loggedBy = existing.loggedBy || currentUser || 'Unknown';
         await db.collection(RECORDS_COL).doc(existing.id).set(record);
+        logActivity('Re-imported RMA ' + record.rmaNumber + ' / ' + record.itemNumber);
       } else {
         record.loggedAt = Date.now();
+        record.loggedBy = currentUser || 'Unknown';
         await db.collection(RECORDS_COL).add(record);
+        logActivity('Logged RMA ' + record.rmaNumber + ' / ' + record.itemNumber + ' (' + record.category + (record.subType ? ' – ' + record.subType : '') + ')');
       }
       document.getElementById('previewCard').style.display = 'none';
       fileInput.value = '';
@@ -826,7 +932,9 @@
     if(!updated[category]) updated[category] = [];
     if(updated[category].some(s => s.toLowerCase() === value.toLowerCase())) return;
     updated[category] = updated[category].concat([value]);
-    db.collection(SUBTYPES_COL).doc(SUBTYPES_DOC).set(updated, {merge:true}).catch(err=>{
+    db.collection(SUBTYPES_COL).doc(SUBTYPES_DOC).set(updated, {merge:true}).then(()=>{
+      logActivity('Added sub-type "' + value + '" to ' + category);
+    }).catch(err=>{
       alert('Could not save sub-type: ' + err.message);
     });
   }
@@ -835,7 +943,9 @@
     if(!db) return;
     const updated = Object.assign({}, DEFAULT_SUBTYPES, subTypes);
     updated[category] = (updated[category] || []).filter(s => s !== value);
-    db.collection(SUBTYPES_COL).doc(SUBTYPES_DOC).set(updated, {merge:true}).catch(err=>{
+    db.collection(SUBTYPES_COL).doc(SUBTYPES_DOC).set(updated, {merge:true}).then(()=>{
+      logActivity('Removed sub-type "' + value + '" from ' + category);
+    }).catch(err=>{
       alert('Could not remove sub-type: ' + err.message);
     });
   }
@@ -1046,11 +1156,21 @@
     const statusEl = document.getElementById('e_photoStatus');
     statusEl.textContent = 'Removing photo…';
     try{
-      await db.collection(RECORDS_COL).doc(editingId).update({ photos: editingPhotos.slice() });
+      await db.collection(RECORDS_COL).doc(editingId).update({
+        photos: editingPhotos.slice(),
+        lastEditedBy: currentUser || 'Unknown',
+        lastEditedAt: Date.now()
+      });
+      logActivity('Removed a photo from ' + editingRef());
       statusEl.textContent = '';
     }catch(err){
       statusEl.textContent = 'Could not remove: ' + err.message;
     }
+  }
+
+  function editingRef(){
+    const r = records.find(x=>x.id===editingId);
+    return r ? (r.rmaNumber + ' / ' + r.itemNumber) : 'item';
   }
 
   document.getElementById('e_photoInput').addEventListener('change', async (e)=>{
@@ -1068,7 +1188,12 @@
         }
         editingPhotos.push(dataUrl);
         statusEl.textContent = 'Saving…';
-        await db.collection(RECORDS_COL).doc(editingId).update({ photos: editingPhotos.slice() });
+        await db.collection(RECORDS_COL).doc(editingId).update({
+          photos: editingPhotos.slice(),
+          lastEditedBy: currentUser || 'Unknown',
+          lastEditedAt: Date.now()
+        });
+        logActivity('Added a photo to ' + editingRef());
       }catch(err){
         alert('Could not save photo: ' + err.message);
       }
@@ -1083,6 +1208,8 @@
     if(!r) return;
     editingId = id;
     document.getElementById('e_ref').value = r.rmaNumber + ' / ' + r.itemNumber;
+    document.getElementById('e_loggedBy').value = r.loggedBy || '—';
+    document.getElementById('e_lastEditedBy').value = (r.lastEditedBy || '—') + (r.lastEditedAt ? ' · ' + new Date(r.lastEditedAt).toLocaleString() : '');
     document.getElementById('e_category').value = r.category;
     fillSubTypeList('e_subType', r.category);
     document.getElementById('e_subType').value = r.subType || '';
@@ -1106,6 +1233,7 @@
   });
   document.getElementById('saveEditBtn').addEventListener('click', async ()=>{
     if(!editingId || !db) return;
+    const ref = editingRef();
     const updates = {
       category: document.getElementById('e_category').value,
       subType: document.getElementById('e_subType').value.trim(),
@@ -1113,12 +1241,15 @@
       qtyOnHand: parseFloat(document.getElementById('e_qty').value) || 0,
       reusedSO: document.getElementById('e_reusedSO').value.trim(),
       location: document.getElementById('e_location').value.trim(),
-      notes: document.getElementById('e_notes').value.trim()
+      notes: document.getElementById('e_notes').value.trim(),
+      lastEditedBy: currentUser || 'Unknown',
+      lastEditedAt: Date.now()
     };
     const btn = document.getElementById('saveEditBtn');
     btn.disabled = true;
     try{
       await db.collection(RECORDS_COL).doc(editingId).update(updates);
+      logActivity('Edited ' + ref + ' — status: ' + STATUS_LABELS[updates.status]);
       document.getElementById('editOverlay').style.display = 'none';
       editingId = null;
       editingPhotos = [];
@@ -1132,8 +1263,10 @@
     if(!editingId || !db) return;
     if(!confirm('Delete this item from the tracker? This can\'t be undone.')) return;
     const id = editingId;
+    const ref = editingRef();
     try{
       await db.collection(RECORDS_COL).doc(id).delete();
+      logActivity('Deleted ' + ref);
       document.getElementById('editOverlay').style.display = 'none';
       editingId = null;
       editingPhotos = [];
