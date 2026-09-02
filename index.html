@@ -208,6 +208,23 @@
     border-radius:50%; background: var(--brick); color:#fff; border:none;
     cursor:pointer; font-size:13px; line-height:1;
   }
+  .file-chip{
+    position:relative; width:130px; height:84px; border:1px solid var(--line);
+    background:#fff; padding:8px; display:flex; flex-direction:column; justify-content:flex-end;
+  }
+  .file-chip .file-icon{ font-size: 20px; line-height:1; margin-bottom:4px; }
+  .file-chip .file-name{
+    font-size: 11px; font-weight:600; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; display:block;
+  }
+  .file-chip .file-size{ font-size: 10.5px; color: var(--ink-soft); }
+  .file-chip a{ color: inherit; text-decoration:none; }
+  .file-chip a:hover .file-name{ text-decoration:underline; }
+  .file-chip button{
+    position:absolute; top:-7px; right:-7px; width:20px; height:20px; padding:0;
+    border-radius:50%; background: var(--brick); color:#fff; border:none;
+    cursor:pointer; font-size:13px; line-height:1;
+  }
   .photo-status{ font-size: 12.5px; color: var(--ink-soft); margin-top: 6px; }
 
   .empty-state{ text-align:center; padding: 40px 20px; color: var(--ink-soft); }
@@ -471,9 +488,9 @@
       <div class="field"><label>Location / bin</label><input id="e_location"></div>
       <div class="field full"><label>Notes</label><textarea id="e_notes" rows="3"></textarea></div>
       <div class="field full">
-        <label>Photos</label>
-        <input type="file" id="e_photoInput" accept="image/*" multiple>
-        <p class="hint" style="margin: 4px 0 0;">Photos are resized and compressed automatically, then saved with the item right away — no separate save step needed for these. A few per item is plenty; Firestore caps how much one item can hold.</p>
+        <label>Photos &amp; files</label>
+        <input type="file" id="e_photoInput" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" multiple>
+        <p class="hint" style="margin: 4px 0 0;">Photos are resized and compressed automatically. Documents (PDF, Word, Excel) are kept as-is, so keep those under about 1MB. Everything saves with the item right away — no separate save step needed.</p>
         <div id="e_photoGrid" class="photo-grid"></div>
         <div id="e_photoStatus" class="photo-status"></div>
       </div>
@@ -524,12 +541,17 @@
   let pendingRecord = null; // parsed-but-not-yet-saved record from Import
   let editingId = null;
   let editingPhotos = []; // base64 JPEG strings while the edit modal is open
+  let editingFiles = []; // {name, type, size, dataUrl} objects while the edit modal is open
   let sortKey = 'rmaDate', sortDir = -1;
   let currentUser = localStorage.getItem(USERNAME_KEY) || '';
 
   // Firestore caps a document at 1 MiB. Leave headroom under that for the
-  // record's other fields so a photo-heavy item doesn't fail to save.
-  const MAX_PHOTOS_BYTES = 900 * 1024;
+  // record's other fields so a photo/file-heavy item doesn't fail to save.
+  const MAX_ATTACHMENT_BYTES = 900 * 1024;
+  // Documents can't be compressed like photos, so cap each one individually
+  // before it ever gets read — keeps a single large file from eating the
+  // whole per-item budget by itself.
+  const MAX_DOCUMENT_RAW_BYTES = 700 * 1024;
 
   const connStatus = document.getElementById('connStatus');
 
@@ -660,6 +682,7 @@
         const copy = Object.assign({}, rec);
         delete copy.id;
         copy.photos = rec.photos || []; // old photos are already plain compressed base64 — compatible as-is
+        copy.files = rec.files || [];
         copy.loggedBy = currentUser || 'Unknown';
         copy.lastEditedBy = currentUser || 'Unknown';
         copy.lastEditedAt = Date.now();
@@ -876,7 +899,8 @@
       status: document.getElementById('p_status').value,
       location: document.getElementById('p_location').value.trim(),
       notes: document.getElementById('p_notes').value.trim(),
-      photos: []
+      photos: [],
+      files: []
     });
     delete record.id;
 
@@ -888,6 +912,7 @@
       record.lastEditedAt = Date.now();
       if(existing){
         record.photos = existing.photos || [];
+        record.files = existing.files || [];
         record.loggedAt = existing.loggedAt || Date.now();
         record.loggedBy = existing.loggedBy || currentUser || 'Unknown';
         await db.collection(RECORDS_COL).doc(existing.id).set(record);
@@ -1123,7 +1148,27 @@
     });
   }
 
-  function renderPhotoGrid(){
+  function attachmentsBytes(){
+    const photoBytes = editingPhotos.reduce((sum,p)=> sum + p.length, 0);
+    const fileBytes = editingFiles.reduce((sum,f)=> sum + f.dataUrl.length, 0);
+    return photoBytes + fileBytes;
+  }
+
+  function fileIcon(name){
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    if(ext === 'pdf') return '📕';
+    if(ext === 'doc' || ext === 'docx') return '📘';
+    if(ext === 'xls' || ext === 'xlsx') return '📗';
+    return '📄';
+  }
+
+  function formatFileSize(bytes){
+    if(bytes < 1024) return bytes + ' B';
+    if(bytes < 1024*1024) return Math.round(bytes/1024) + ' KB';
+    return (bytes/(1024*1024)).toFixed(1) + ' MB';
+  }
+
+  function renderAttachments(){
     const grid = document.getElementById('e_photoGrid');
     grid.innerHTML = '';
     editingPhotos.forEach((photoDataUrl, i)=>{
@@ -1143,34 +1188,71 @@
       div.appendChild(img); div.appendChild(del);
       grid.appendChild(div);
     });
+    editingFiles.forEach((file, i)=>{
+      const div = document.createElement('div');
+      div.className = 'file-chip';
+      const a = document.createElement('a');
+      a.href = file.dataUrl;
+      a.download = file.name;
+      a.title = 'Click to download';
+      a.innerHTML = '<span class="file-icon">' + fileIcon(file.name) + '</span>'
+        + '<span class="file-name">' + escapeHtml(file.name) + '</span>'
+        + '<span class="file-size">' + formatFileSize(file.size) + '</span>';
+      const del = document.createElement('button');
+      del.textContent = '\u00d7';
+      del.title = 'Remove file';
+      del.addEventListener('click', ()=> removeFile(i));
+      div.appendChild(a); div.appendChild(del);
+      grid.appendChild(div);
+    });
   }
 
-  function photosBytes(photos){
-    return photos.reduce((sum, p) => sum + p.length, 0); // base64 length ≈ bytes stored
+  async function persistAttachments(activitySummary){
+    const statusEl = document.getElementById('e_photoStatus');
+    statusEl.textContent = 'Saving…';
+    try{
+      await db.collection(RECORDS_COL).doc(editingId).update({
+        photos: editingPhotos.slice(),
+        files: editingFiles.slice(),
+        lastEditedBy: currentUser || 'Unknown',
+        lastEditedAt: Date.now()
+      });
+      if(activitySummary) logActivity(activitySummary);
+      statusEl.textContent = '';
+      return true;
+    }catch(err){
+      statusEl.textContent = 'Could not save: ' + err.message;
+      return false;
+    }
   }
 
   async function removePhoto(i){
     if(!editingId || !db) return;
     editingPhotos.splice(i, 1);
-    renderPhotoGrid();
-    const statusEl = document.getElementById('e_photoStatus');
-    statusEl.textContent = 'Removing photo…';
-    try{
-      await db.collection(RECORDS_COL).doc(editingId).update({
-        photos: editingPhotos.slice(),
-        lastEditedBy: currentUser || 'Unknown',
-        lastEditedAt: Date.now()
-      });
-      logActivity('Removed a photo from ' + editingRef());
-      statusEl.textContent = '';
-    }catch(err){
-      statusEl.textContent = 'Could not remove: ' + err.message;
-    }
+    renderAttachments();
+    await persistAttachments('Removed a photo from ' + editingRef());
+  }
+
+  async function removeFile(i){
+    if(!editingId || !db) return;
+    const name = editingFiles[i].name;
+    editingFiles.splice(i, 1);
+    renderAttachments();
+    await persistAttachments('Removed "' + name + '" from ' + editingRef());
   }
 
   function editingRef(){
     const r = records.find(x=>x.id===editingId);
     return r ? (r.rmaNumber + ' / ' + r.itemNumber) : 'item';
+  }
+
+  function readFileAsDataURL(file){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('Could not read that file.'));
+      reader.readAsDataURL(file);
+    });
   }
 
   document.getElementById('e_photoInput').addEventListener('change', async (e)=>{
@@ -1179,27 +1261,37 @@
     if(!editingId || !db) return;
     const statusEl = document.getElementById('e_photoStatus');
     for(const file of files){
-      statusEl.textContent = 'Compressing photo…';
+      const isImage = file.type.startsWith('image/');
       try{
-        const dataUrl = await compressImage(file, 900, 0.6);
-        if(photosBytes(editingPhotos) + dataUrl.length > MAX_PHOTOS_BYTES){
-          alert('This item already has enough photos to fill Firestore\'s per-item storage limit. Remove one before adding another.');
+        let dataUrl;
+        if(isImage){
+          statusEl.textContent = 'Compressing photo…';
+          dataUrl = await compressImage(file, 900, 0.6);
+        } else {
+          if(file.size > MAX_DOCUMENT_RAW_BYTES){
+            alert('"' + file.name + '" is ' + formatFileSize(file.size) + ' — keep documents under about 700KB so they fit alongside everything else on this item.');
+            continue;
+          }
+          statusEl.textContent = 'Reading file…';
+          dataUrl = await readFileAsDataURL(file);
+        }
+        if(attachmentsBytes() + dataUrl.length > MAX_ATTACHMENT_BYTES){
+          alert('This item already has enough photos/files to fill Firestore\'s per-item storage limit. Remove one before adding another.');
           break;
         }
-        editingPhotos.push(dataUrl);
-        statusEl.textContent = 'Saving…';
-        await db.collection(RECORDS_COL).doc(editingId).update({
-          photos: editingPhotos.slice(),
-          lastEditedBy: currentUser || 'Unknown',
-          lastEditedAt: Date.now()
-        });
-        logActivity('Added a photo to ' + editingRef());
+        if(isImage){
+          editingPhotos.push(dataUrl);
+        } else {
+          editingFiles.push({ name: file.name, type: file.type, size: file.size, dataUrl });
+        }
+        renderAttachments();
+        await persistAttachments((isImage ? 'Added a photo' : 'Added "' + file.name + '"') + ' to ' + editingRef());
       }catch(err){
-        alert('Could not save photo: ' + err.message);
+        alert('Could not save: ' + err.message);
       }
     }
     statusEl.textContent = '';
-    renderPhotoGrid();
+    renderAttachments();
   });
 
   // ---------- Edit modal ----------
@@ -1220,7 +1312,8 @@
     document.getElementById('e_notes').value = r.notes || '';
     document.getElementById('e_photoStatus').textContent = '';
     editingPhotos = (r.photos || []).slice();
-    renderPhotoGrid();
+    editingFiles = (r.files || []).slice();
+    renderAttachments();
     document.getElementById('editOverlay').style.display = 'flex';
   }
   document.getElementById('e_category').addEventListener('change', e=>{
@@ -1230,6 +1323,7 @@
     document.getElementById('editOverlay').style.display = 'none';
     editingId = null;
     editingPhotos = [];
+    editingFiles = [];
   });
   document.getElementById('saveEditBtn').addEventListener('click', async ()=>{
     if(!editingId || !db) return;
@@ -1253,6 +1347,7 @@
       document.getElementById('editOverlay').style.display = 'none';
       editingId = null;
       editingPhotos = [];
+      editingFiles = [];
     }catch(err){
       alert('Could not save: ' + err.message);
     } finally {
@@ -1270,6 +1365,7 @@
       document.getElementById('editOverlay').style.display = 'none';
       editingId = null;
       editingPhotos = [];
+      editingFiles = [];
     }catch(err){
       alert('Could not delete: ' + err.message);
     }
