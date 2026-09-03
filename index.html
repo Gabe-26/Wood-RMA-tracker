@@ -107,6 +107,8 @@
   .stat-block.scrapped{ border-left-color: var(--brick); }
   .stat-block .num{ font-family:'Zilla Slab',serif; font-size: 26px; font-weight: 700; line-height:1; }
   .stat-block .lbl{ font-size: 12px; color: var(--ink-soft); margin-top: 5px; }
+  .stat-block[data-stat-category]{ cursor: pointer; }
+  .stat-block[data-stat-category]:hover{ background: var(--surface-2); }
 
   .card{
     background: var(--surface); border: 1px solid var(--line);
@@ -340,9 +342,9 @@
   <!-- INVENTORY PANEL -->
   <section class="panel" id="panel-inventory">
     <div class="stat-strip">
-      <div class="stat-block fence"><div class="num" id="stat-fence">0</div><div class="lbl">Fence in storage</div></div>
-      <div class="stat-block gate"><div class="num" id="stat-gate">0</div><div class="lbl">Gate in storage</div></div>
-      <div class="stat-block post"><div class="num" id="stat-post">0</div><div class="lbl">Post in storage</div></div>
+      <div class="stat-block fence" data-stat-category="Fence" title="Show Fence in storage"><div class="num" id="stat-fence">0</div><div class="lbl">Fence in storage</div></div>
+      <div class="stat-block gate" data-stat-category="Gate" title="Show Gate in storage"><div class="num" id="stat-gate">0</div><div class="lbl">Gate in storage</div></div>
+      <div class="stat-block post" data-stat-category="Post" title="Show Post in storage"><div class="num" id="stat-post">0</div><div class="lbl">Post in storage</div></div>
       <div class="stat-block value"><div class="num" id="stat-value">$0</div><div class="lbl">Value in storage</div></div>
       <div class="stat-block reused"><div class="num" id="stat-value-reused">$0</div><div class="lbl">Value reused</div></div>
       <div class="stat-block scrapped"><div class="num" id="stat-value-scrapped">$0</div><div class="lbl">Value scrapped</div></div>
@@ -1136,6 +1138,20 @@
   });
   document.getElementById('printBtn').addEventListener('click', ()=> window.print());
 
+  // Clicking a "X in storage" stat block jumps straight to that category,
+  // filtered to In storage — the filter row above stays available for
+  // digging into where a specific item came from (RMA #, customer, etc.).
+  document.querySelectorAll('.stat-block[data-stat-category]').forEach(block=>{
+    block.addEventListener('click', ()=>{
+      document.getElementById('f_category').value = block.dataset.statCategory;
+      document.getElementById('f_status').value = 'storage';
+      document.getElementById('f_subType').value = '';
+      document.getElementById('f_search').value = '';
+      updateSubTypeFilterOptions();
+      renderInventory();
+    });
+  });
+
   // ---------- Photos (Firebase Storage) ----------
   // Resizes to a max dimension and re-encodes as JPEG before upload, so a
   // multi-MB phone photo becomes a small file in Storage.
@@ -1398,13 +1414,17 @@
       alert('Need at least 2 units on hand to split this item.');
       return;
     }
-    const input = prompt('How many units should move to a new record? (out of ' + currentQty + ' on hand)', '1');
+    const input = prompt('How many units are you taking out? (out of ' + currentQty + ' on hand)', '1');
     if(input === null) return;
     const splitQty = parseFloat(input);
     if(!splitQty || splitQty <= 0 || splitQty >= currentQty){
       alert('Enter a number greater than 0 and less than ' + currentQty + '.');
       return;
     }
+    const wantsReused = confirm('Mark those ' + splitQty + ' unit(s) as REUSED?\n\nOK = Reused\nCancel = Scrapped');
+    const newStatus = wantsReused ? 'reused' : 'scrapped';
+    const newReusedSO = wantsReused ? (prompt('Sales order # this is being reused on (optional):', '') || '') : '';
+
     const remainingQty = currentQty - splitQty;
     const unitValue = (r.extension || 0) / currentQty;
     const splitExtension = Math.round(unitValue * splitQty * 100) / 100;
@@ -1414,6 +1434,8 @@
     const newRecord = Object.assign({}, r, {
       qtyOnHand: splitQty,
       extension: splitExtension,
+      status: newStatus,
+      reusedSO: newReusedSO,
       photos: [],
       files: [],
       splitFromId: r.id,
@@ -1434,7 +1456,7 @@
         lastEditedBy: currentUser || 'Unknown',
         lastEditedAt: Date.now()
       });
-      logActivity('Split ' + splitQty + ' unit(s) off ' + ref + ' into a new record');
+      logActivity('Split ' + splitQty + ' unit(s) off ' + ref + ' and marked ' + STATUS_LABELS[newStatus]);
       document.getElementById('editOverlay').style.display = 'none';
       editingId = null;
       editingPhotos = [];
