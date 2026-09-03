@@ -497,6 +497,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn danger" id="deleteRecordBtn">Delete item</button>
+      <button class="btn secondary" id="splitRecordBtn" title="Move part of the quantity into a new, separately-tracked record">Split item</button>
       <button class="btn secondary" id="cancelEditBtn">Cancel</button>
       <button class="btn" id="saveEditBtn">Save changes</button>
     </div>
@@ -1368,6 +1369,68 @@
       editingFiles = [];
     }catch(err){
       alert('Could not delete: ' + err.message);
+    }
+  });
+
+  // Splits some of an item's qtyOnHand off into a brand-new record so the
+  // two portions can carry different statuses (e.g. 1 reused, 1 scrapped)
+  // from the same RMA/item line. Value (extension) is divided proportionally
+  // so the storage/reused/scrapped stat totals stay accurate. Photos/files
+  // stay with the original record — the new record starts with none.
+  document.getElementById('splitRecordBtn').addEventListener('click', async ()=>{
+    if(!editingId || !db) return;
+    const r = records.find(x=>x.id===editingId);
+    if(!r) return;
+    const currentQty = r.qtyOnHand || 0;
+    if(currentQty <= 1){
+      alert('Need at least 2 units on hand to split this item.');
+      return;
+    }
+    const input = prompt('How many units should move to a new record? (out of ' + currentQty + ' on hand)', '1');
+    if(input === null) return;
+    const splitQty = parseFloat(input);
+    if(!splitQty || splitQty <= 0 || splitQty >= currentQty){
+      alert('Enter a number greater than 0 and less than ' + currentQty + '.');
+      return;
+    }
+    const remainingQty = currentQty - splitQty;
+    const unitValue = (r.extension || 0) / currentQty;
+    const splitExtension = Math.round(unitValue * splitQty * 100) / 100;
+    const remainingExtension = Math.round(((r.extension || 0) - splitExtension) * 100) / 100;
+    const ref = editingRef();
+
+    const newRecord = Object.assign({}, r, {
+      qtyOnHand: splitQty,
+      extension: splitExtension,
+      photos: [],
+      files: [],
+      splitFromId: r.id,
+      loggedBy: currentUser || 'Unknown',
+      loggedAt: Date.now(),
+      lastEditedBy: currentUser || 'Unknown',
+      lastEditedAt: Date.now()
+    });
+    delete newRecord.id;
+
+    const btn = document.getElementById('splitRecordBtn');
+    btn.disabled = true;
+    try{
+      await db.collection(RECORDS_COL).add(newRecord);
+      await db.collection(RECORDS_COL).doc(editingId).update({
+        qtyOnHand: remainingQty,
+        extension: remainingExtension,
+        lastEditedBy: currentUser || 'Unknown',
+        lastEditedAt: Date.now()
+      });
+      logActivity('Split ' + splitQty + ' unit(s) off ' + ref + ' into a new record');
+      document.getElementById('editOverlay').style.display = 'none';
+      editingId = null;
+      editingPhotos = [];
+      editingFiles = [];
+    }catch(err){
+      alert('Could not split: ' + err.message);
+    } finally {
+      btn.disabled = false;
     }
   });
 
