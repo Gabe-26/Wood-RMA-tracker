@@ -506,6 +506,57 @@
   </div>
 </div>
 
+<div class="overlay no-print" id="storageLookupOverlay" style="display:none;">
+  <div class="modal" style="max-width:920px;">
+    <h2 id="storageLookupTitle">In storage</h2>
+    <p class="hint">Filter to find exactly what you're after, then open an item to edit it or take some out.</p>
+    <div class="filter-row">
+      <div class="field">
+        <label>Category</label>
+        <select id="m_category">
+          <option value="">All</option>
+          <option>Fence</option><option>Gate</option><option>Post</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Sub-type</label>
+        <select id="m_subType"><option value="">All</option></select>
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <select id="m_status">
+          <option value="">All</option>
+          <option value="awaiting">Awaiting receipt</option>
+          <option value="storage">In storage</option>
+          <option value="reused">Reused</option>
+          <option value="scrapped">Scrapped</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Search (RMA#, item#, customer, description)</label>
+        <input id="m_search" placeholder="Start typing…">
+      </div>
+    </div>
+    <div style="overflow:auto; max-height: 50vh;">
+      <table id="storageLookupTable">
+        <thead>
+          <tr>
+            <th>RMA #</th><th>Date</th><th>Customer</th><th>Item #</th><th>Description</th><th>Sub-type</th><th>Qty</th><th>Status</th><th>Location</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="storageLookupBody"></tbody>
+      </table>
+      <div class="empty-state" id="storageLookupEmpty" style="display:none;">
+        <strong>No matches</strong>
+        Try adjusting the filters above.
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="closeStorageLookupBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1012,17 +1063,18 @@
   // ---------- Inventory rendering ----------
   const STATUS_LABELS = { awaiting:'Awaiting receipt', storage:'In storage', reused:'Reused', scrapped:'Scrapped' };
 
-  function currentFilters(){
+  function currentFilters(prefix){
+    prefix = prefix || 'f_';
     return {
-      category: document.getElementById('f_category').value,
-      subType: document.getElementById('f_subType').value,
-      status: document.getElementById('f_status').value,
-      search: document.getElementById('f_search').value.trim().toLowerCase()
+      category: document.getElementById(prefix+'category').value,
+      subType: document.getElementById(prefix+'subType').value,
+      status: document.getElementById(prefix+'status').value,
+      search: document.getElementById(prefix+'search').value.trim().toLowerCase()
     };
   }
 
-  function filteredRecords(){
-    const f = currentFilters();
+  function filteredRecords(prefix){
+    const f = currentFilters(prefix);
     return records.filter(r=>{
       if(f.category && r.category !== f.category) return false;
       if(f.subType && r.subType !== f.subType) return false;
@@ -1035,9 +1087,11 @@
     });
   }
 
-  function updateSubTypeFilterOptions(){
-    const cat = document.getElementById('f_category').value;
-    const sel = document.getElementById('f_subType');
+  function updateSubTypeFilterOptions(catId, subId){
+    catId = catId || 'f_category';
+    subId = subId || 'f_subType';
+    const cat = document.getElementById(catId).value;
+    const sel = document.getElementById(subId);
     const current = sel.value;
     const pool = cat ? (subTypes[cat] || []) : Object.values(subTypes).flat();
     sel.innerHTML = '<option value="">All</option>' +
@@ -1138,18 +1192,65 @@
   });
   document.getElementById('printBtn').addEventListener('click', ()=> window.print());
 
-  // Clicking a "X in storage" stat block jumps straight to that category,
-  // filtered to In storage — the filter row above stays available for
-  // digging into where a specific item came from (RMA #, customer, etc.).
-  document.querySelectorAll('.stat-block[data-stat-category]').forEach(block=>{
-    block.addEventListener('click', ()=>{
-      document.getElementById('f_category').value = block.dataset.statCategory;
-      document.getElementById('f_status').value = 'storage';
-      document.getElementById('f_subType').value = '';
-      document.getElementById('f_search').value = '';
-      updateSubTypeFilterOptions();
-      renderInventory();
+  // Clicking a "X in storage" stat block opens a self-contained lookup
+  // modal, preset to that category + In storage, with its own filters —
+  // separate from the main Inventory table's filter row.
+  function renderStorageLookup(){
+    updateSubTypeFilterOptions('m_category', 'm_subType');
+    const list = filteredRecords('m_').slice().sort((a,b)=>{
+      return new Date(b.rmaDate||0).getTime() - new Date(a.rmaDate||0).getTime();
     });
+    const body = document.getElementById('storageLookupBody');
+    body.innerHTML = '';
+    document.getElementById('storageLookupEmpty').style.display = list.length ? 'none' : 'block';
+    list.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.rmaNumber)}</td>
+        <td>${escapeHtml(r.rmaDate)}</td>
+        <td>${escapeHtml(r.customerName)}</td>
+        <td>${escapeHtml(r.itemNumber)}${splitLabel(r)}</td>
+        <td class="desc-cell">${escapeHtml(r.description)}</td>
+        <td>${escapeHtml(r.subType) || '<span class="muted">—</span>'}</td>
+        <td>${r.qtyOnHand ?? ''} ${escapeHtml(r.um||'')}</td>
+        <td><span class="chip ${r.status}">${STATUS_LABELS[r.status]}</span></td>
+        <td>${escapeHtml(r.location) || '<span class="muted">—</span>'}</td>
+        <td><button class="btn small secondary" data-open="${r.id}">Open</button></td>
+      `;
+      body.appendChild(tr);
+    });
+    body.querySelectorAll('[data-open]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.getElementById('storageLookupOverlay').style.display = 'none';
+        openEdit(btn.dataset.open);
+      });
+    });
+  }
+
+  function openStorageLookup(category){
+    document.getElementById('storageLookupTitle').textContent = category + ' in storage';
+    document.getElementById('m_category').value = category;
+    document.getElementById('m_status').value = 'storage';
+    document.getElementById('m_subType').value = '';
+    document.getElementById('m_search').value = '';
+    renderStorageLookup();
+    document.getElementById('storageLookupOverlay').style.display = 'flex';
+  }
+
+  document.querySelectorAll('.stat-block[data-stat-category]').forEach(block=>{
+    block.addEventListener('click', ()=> openStorageLookup(block.dataset.statCategory));
+  });
+
+  document.getElementById('m_category').addEventListener('change', ()=>{
+    updateSubTypeFilterOptions('m_category', 'm_subType');
+    renderStorageLookup();
+  });
+  ['m_subType','m_status'].forEach(id=>{
+    document.getElementById(id).addEventListener('change', renderStorageLookup);
+  });
+  document.getElementById('m_search').addEventListener('input', renderStorageLookup);
+  document.getElementById('closeStorageLookupBtn').addEventListener('click', ()=>{
+    document.getElementById('storageLookupOverlay').style.display = 'none';
   });
 
   // ---------- Photos (Firebase Storage) ----------
