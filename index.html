@@ -499,7 +499,7 @@
     </div>
     <div class="modal-actions">
       <button class="btn danger" id="deleteRecordBtn">Delete item</button>
-      <button class="btn secondary" id="splitRecordBtn" title="Move part of the quantity into a new, separately-tracked record">Split item</button>
+      <button class="btn secondary" id="markUnitsBtn" title="Move some of the qty on hand to Reused or Scrapped, on this same record">Mark some as reused/scrapped</button>
       <button class="btn secondary" id="cancelEditBtn">Cancel</button>
       <button class="btn" id="saveEditBtn">Save changes</button>
     </div>
@@ -1102,16 +1102,42 @@
     return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
-  // Records that share an RMA #/Item # can only exist because one was split
-  // off the other (CSV import upserts on that same pair, so it never creates
-  // duplicates on its own). Label each sibling "Split x/y" so rows that
-  // otherwise look identical are distinguishable at a glance.
-  function splitLabel(r){
-    const siblings = records.filter(x => x.rmaNumber === r.rmaNumber && x.itemNumber === r.itemNumber);
-    if(siblings.length <= 1) return '';
-    const sorted = siblings.slice().sort((a,b)=> (a.loggedAt||0) - (b.loggedAt||0));
-    const idx = sorted.findIndex(x=>x.id===r.id) + 1;
-    return ' <span class="chip auto" title="This RMA/item was split into ' + siblings.length + ' separately-tracked records">Split ' + idx + '/' + siblings.length + '</span>';
+  // A record's extension is its total original value. scrappedValue/reusedValue
+  // are the portions already carved off it by "Mark units" actions below.
+  // Whatever's left over ("remainder") belongs to whatever the record's
+  // current status is — so a record can be partly scrapped, partly reused,
+  // and still have a remainder sitting in storage, all on the one row.
+  function remainderValue(r){
+    return (r.extension || 0) - (r.scrappedValue || 0) - (r.reusedValue || 0);
+  }
+  function valueInStorage(r){ return r.status === 'storage' ? remainderValue(r) : 0; }
+  function valueReused(r){ return (r.reusedValue || 0) + (r.status === 'reused' ? remainderValue(r) : 0); }
+  function valueScrapped(r){ return (r.scrappedValue || 0) + (r.status === 'scrapped' ? remainderValue(r) : 0); }
+
+  // Per-unit value, derived from what's still unaccounted-for divided across
+  // whatever's still on hand plus whatever's already been marked — works for
+  // brand-new records (no scrappedQty/reusedQty yet) and ones with history.
+  function getUnitValue(r){
+    const originalQty = (r.qtyOnHand || 0) + (r.scrappedQty || 0) + (r.reusedQty || 0);
+    return originalQty > 0 ? (r.extension || 0) / originalQty : 0;
+  }
+
+  // Once a record's status fully flips to Reused/Scrapped, qtyOnHand no
+  // longer holds the meaningful count — the matching *Qty field does.
+  function displayQty(r){
+    if(r.status === 'reused') return r.reusedQty || r.qtyOnHand || 0;
+    if(r.status === 'scrapped') return r.scrappedQty || r.qtyOnHand || 0;
+    return r.qtyOnHand || 0;
+  }
+
+  // Status chip plus small notes for any scrap/reuse history that ISN'T
+  // already represented by the current status chip — e.g. a row still "In
+  // storage" but with 1 already scrapped shows both.
+  function statusCellHtml(r){
+    let html = '<span class="chip ' + r.status + '">' + STATUS_LABELS[r.status] + '</span>';
+    if(r.scrappedQty && r.status !== 'scrapped') html += '<div class="muted" style="font-size:11px;margin-top:3px;">' + r.scrappedQty + ' scrapped</div>';
+    if(r.reusedQty && r.status !== 'reused') html += '<div class="muted" style="font-size:11px;margin-top:3px;">' + r.reusedQty + ' reused</div>';
+    return html;
   }
 
   function renderStats(){
@@ -1121,11 +1147,11 @@
     document.getElementById('stat-gate').textContent = qtyFor('Gate');
     document.getElementById('stat-post').textContent = qtyFor('Post');
 
-    const valueFor = (status) => records.filter(r=>r.status===status).reduce((sum,r)=> sum + (r.extension || 0), 0);
     const fmt = (n) => '$' + n.toLocaleString(undefined,{maximumFractionDigits:0});
-    document.getElementById('stat-value').textContent = fmt(valueFor('storage'));
-    document.getElementById('stat-value-reused').textContent = fmt(valueFor('reused'));
-    document.getElementById('stat-value-scrapped').textContent = fmt(valueFor('scrapped'));
+    const sumBy = (fn) => records.reduce((sum,r)=> sum + fn(r), 0);
+    document.getElementById('stat-value').textContent = fmt(sumBy(valueInStorage));
+    document.getElementById('stat-value-reused').textContent = fmt(sumBy(valueReused));
+    document.getElementById('stat-value-scrapped').textContent = fmt(sumBy(valueScrapped));
   }
 
   function renderInventory(){
@@ -1152,12 +1178,12 @@
         <td>${escapeHtml(r.rmaNumber)}</td>
         <td>${escapeHtml(r.rmaDate)}</td>
         <td>${escapeHtml(r.customerName)}</td>
-        <td>${escapeHtml(r.itemNumber)}${splitLabel(r)}</td>
+        <td>${escapeHtml(r.itemNumber)}</td>
         <td class="desc-cell">${escapeHtml(r.description)}</td>
         <td>${escapeHtml(r.category)}</td>
         <td>${escapeHtml(r.subType) || '<span class="muted">—</span>'}</td>
-        <td>${r.qtyOnHand ?? ''} ${escapeHtml(r.um||'')}</td>
-        <td><span class="chip ${r.status}">${STATUS_LABELS[r.status]}</span></td>
+        <td>${displayQty(r)} ${escapeHtml(r.um||'')}</td>
+        <td>${statusCellHtml(r)}</td>
         <td>${escapeHtml(r.location) || '<span class="muted">—</span>'}</td>
         <td class="actions-cell no-print"><button class="btn small secondary" data-edit="${r.id}">Edit</button></td>
       `;
@@ -1209,11 +1235,11 @@
         <td>${escapeHtml(r.rmaNumber)}</td>
         <td>${escapeHtml(r.rmaDate)}</td>
         <td>${escapeHtml(r.customerName)}</td>
-        <td>${escapeHtml(r.itemNumber)}${splitLabel(r)}</td>
+        <td>${escapeHtml(r.itemNumber)}</td>
         <td class="desc-cell">${escapeHtml(r.description)}</td>
         <td>${escapeHtml(r.subType) || '<span class="muted">—</span>'}</td>
-        <td>${r.qtyOnHand ?? ''} ${escapeHtml(r.um||'')}</td>
-        <td><span class="chip ${r.status}">${STATUS_LABELS[r.status]}</span></td>
+        <td>${displayQty(r)} ${escapeHtml(r.um||'')}</td>
+        <td>${statusCellHtml(r)}</td>
         <td>${escapeHtml(r.location) || '<span class="muted">—</span>'}</td>
         <td><button class="btn small secondary" data-open="${r.id}">Open</button></td>
       `;
@@ -1501,69 +1527,66 @@
     }
   });
 
-  // Splits some of an item's qtyOnHand off into a brand-new record so the
-  // two portions can carry different statuses (e.g. 1 reused, 1 scrapped)
-  // from the same RMA/item line. Value (extension) is divided proportionally
-  // so the storage/reused/scrapped stat totals stay accurate. Photos/files
-  // stay with the original record — the new record starts with none.
-  document.getElementById('splitRecordBtn').addEventListener('click', async ()=>{
+  // Marks some of an item's qtyOnHand as Reused or Scrapped WITHOUT creating
+  // a second record — it stays one row. The chosen quantity/value moves into
+  // scrappedQty+scrappedValue or reusedQty+reusedValue on this same record,
+  // qtyOnHand drops by that amount, and if that uses up everything left, the
+  // whole record's status flips too (same as choosing it from the Status
+  // dropdown). See remainderValue()/valueInStorage() etc. above for how the
+  // stat totals account for a record that's partly one thing, partly another.
+  document.getElementById('markUnitsBtn').addEventListener('click', async ()=>{
     if(!editingId || !db) return;
     const r = records.find(x=>x.id===editingId);
     if(!r) return;
     const currentQty = r.qtyOnHand || 0;
-    if(currentQty <= 1){
-      alert('Need at least 2 units on hand to split this item.');
+    if(currentQty < 1){
+      alert('Nothing left on hand for this item to mark.');
       return;
     }
-    const input = prompt('How many units are you taking out? (out of ' + currentQty + ' on hand)', '1');
+    const input = prompt('How many units are you marking? (out of ' + currentQty + ' currently in storage)', '1');
     if(input === null) return;
-    const splitQty = parseFloat(input);
-    if(!splitQty || splitQty <= 0 || splitQty >= currentQty){
-      alert('Enter a number greater than 0 and less than ' + currentQty + '.');
+    const n = parseFloat(input);
+    if(!n || n <= 0 || n > currentQty){
+      alert('Enter a number greater than 0 and no more than ' + currentQty + '.');
       return;
     }
-    const wantsReused = confirm('Mark those ' + splitQty + ' unit(s) as REUSED?\n\nOK = Reused\nCancel = Scrapped');
-    const newStatus = wantsReused ? 'reused' : 'scrapped';
-    const newReusedSO = wantsReused ? (prompt('Sales order # this is being reused on (optional):', '') || '') : '';
+    const wantsReused = confirm('Mark those ' + n + ' unit(s) as REUSED?\n\nOK = Reused\nCancel = Scrapped/damaged');
+    const reusedSOInput = wantsReused ? (prompt('Sales order # this is being reused on (optional):', r.reusedSO || '') || '') : '';
 
-    const remainingQty = currentQty - splitQty;
-    const unitValue = (r.extension || 0) / currentQty;
-    const splitExtension = Math.round(unitValue * splitQty * 100) / 100;
-    const remainingExtension = Math.round(((r.extension || 0) - splitExtension) * 100) / 100;
+    const moveValue = Math.round(getUnitValue(r) * n * 100) / 100;
+    const remainingQty = currentQty - n;
     const ref = editingRef();
 
-    const newRecord = Object.assign({}, r, {
-      qtyOnHand: splitQty,
-      extension: splitExtension,
-      status: newStatus,
-      reusedSO: newReusedSO,
-      photos: [],
-      files: [],
-      splitFromId: r.id,
-      loggedBy: currentUser || 'Unknown',
-      loggedAt: Date.now(),
+    const updates = {
+      qtyOnHand: remainingQty,
       lastEditedBy: currentUser || 'Unknown',
       lastEditedAt: Date.now()
-    });
-    delete newRecord.id;
+    };
+    if(wantsReused){
+      updates.reusedQty = (r.reusedQty || 0) + n;
+      updates.reusedValue = Math.round(((r.reusedValue || 0) + moveValue) * 100) / 100;
+      if(reusedSOInput) updates.reusedSO = reusedSOInput;
+    } else {
+      updates.scrappedQty = (r.scrappedQty || 0) + n;
+      updates.scrappedValue = Math.round(((r.scrappedValue || 0) + moveValue) * 100) / 100;
+    }
+    // Nothing left in storage on this line — the record's overall status
+    // now reflects that too, same as flipping it via the Status dropdown.
+    if(remainingQty <= 0){
+      updates.status = wantsReused ? 'reused' : 'scrapped';
+    }
 
-    const btn = document.getElementById('splitRecordBtn');
+    const btn = document.getElementById('markUnitsBtn');
     btn.disabled = true;
     try{
-      await db.collection(RECORDS_COL).add(newRecord);
-      await db.collection(RECORDS_COL).doc(editingId).update({
-        qtyOnHand: remainingQty,
-        extension: remainingExtension,
-        lastEditedBy: currentUser || 'Unknown',
-        lastEditedAt: Date.now()
-      });
-      logActivity('Split ' + splitQty + ' unit(s) off ' + ref + ' and marked ' + STATUS_LABELS[newStatus]);
+      await db.collection(RECORDS_COL).doc(editingId).update(updates);
+      logActivity('Marked ' + n + ' unit(s) of ' + ref + ' as ' + (wantsReused ? 'Reused' : 'Scrapped'));
       document.getElementById('editOverlay').style.display = 'none';
       editingId = null;
       editingPhotos = [];
       editingFiles = [];
     }catch(err){
-      alert('Could not split: ' + err.message);
+      alert('Could not save: ' + err.message);
     } finally {
       btn.disabled = false;
     }
