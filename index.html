@@ -1046,6 +1046,18 @@
     return (s||'').toString().replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
+  // Records that share an RMA #/Item # can only exist because one was split
+  // off the other (CSV import upserts on that same pair, so it never creates
+  // duplicates on its own). Label each sibling "Split x/y" so rows that
+  // otherwise look identical are distinguishable at a glance.
+  function splitLabel(r){
+    const siblings = records.filter(x => x.rmaNumber === r.rmaNumber && x.itemNumber === r.itemNumber);
+    if(siblings.length <= 1) return '';
+    const sorted = siblings.slice().sort((a,b)=> (a.loggedAt||0) - (b.loggedAt||0));
+    const idx = sorted.findIndex(x=>x.id===r.id) + 1;
+    return ' <span class="chip auto" title="This RMA/item was split into ' + siblings.length + ' separately-tracked records">Split ' + idx + '/' + siblings.length + '</span>';
+  }
+
   function renderStats(){
     const inStorage = records.filter(r=>r.status==='storage');
     const qtyFor = (cat) => inStorage.filter(r=>r.category===cat).reduce((sum,r)=> sum + (r.qtyOnHand || 0), 0);
@@ -1084,7 +1096,7 @@
         <td>${escapeHtml(r.rmaNumber)}</td>
         <td>${escapeHtml(r.rmaDate)}</td>
         <td>${escapeHtml(r.customerName)}</td>
-        <td>${escapeHtml(r.itemNumber)}</td>
+        <td>${escapeHtml(r.itemNumber)}${splitLabel(r)}</td>
         <td class="desc-cell">${escapeHtml(r.description)}</td>
         <td>${escapeHtml(r.category)}</td>
         <td>${escapeHtml(r.subType) || '<span class="muted">—</span>'}</td>
