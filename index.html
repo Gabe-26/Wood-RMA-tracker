@@ -848,6 +848,51 @@
     return '';
   }
 
+  // The Sage 100 "RMA Receipts History Report" export — used for RMAs that
+  // are already fully received and so no longer appear on the Open RMA
+  // Report. Different layout than the Open RMA export, so it gets its own
+  // anchor: it has no "Status:" label, but always has "RMA:" up front. Offsets
+  // below were derived from the report's fixed column template, same
+  // approach as extractRmaFields above.
+  function extractReceiptsHistoryFields(fields){
+    const idx = fields.indexOf('RMA:');
+    if(idx === -1) return null;
+
+    const at = (offset) => (fields[idx+offset] || '').toString().trim();
+    const billToRaw = at(9);
+    const customerName = (billToRaw.split(/\r\n|\n/).find(line => line.trim()) || '').trim();
+    const totalIdx = fields.findIndex(f => /^RMA .+ Total:$/.test(f));
+
+    return {
+      rmaNumber: at(1),
+      rmaDate: at(5),
+      customerCode: at(3),
+      customerName: customerName,
+      sourceStatus: '',
+      expireDate: '',
+      itemNumber: at(45),
+      description: at(46),
+      crossShip: at(51),
+      warehouse: at(49),
+      um: at(50),
+      returnQty: parseFloat(at(53)) || 0,
+      receivedQty: parseFloat(at(54)) || 0,
+      // This report only lists RMAs that are already fully received/closed,
+      // so there's no "still open" quantity — it always goes straight to storage.
+      remainingQty: 0,
+      price: parseFloat(at(55)) || 0,
+      extension: parseFloat(at(56)) || 0,
+      originalInvoice: at(59),
+      salesperson: '',
+      reason: at(58),
+      itemAction: at(72),
+      customerAction: at(70),
+      restockingCharge: at(57),
+      rmaTotal: totalIdx === -1 ? '' : (fields[totalIdx+1] || '').trim(),
+      comment: findComment(fields, idx)
+    };
+  }
+
   function detectCategory(description){
     const d = (description || '').toUpperCase();
     if(/\bGATE\b/.test(d)) return 'Gate';
@@ -878,9 +923,13 @@
       try{
         const rows = parseCSV(reader.result);
         const fields = rows.flat();
-        const parsed = extractRmaFields(fields);
+        // Try the Open RMA Report anchor first, then fall back to the
+        // Receipts History Report anchor — either export is accepted.
+        const parsed = fields.indexOf('Status:') !== -1
+          ? extractRmaFields(fields)
+          : extractReceiptsHistoryFields(fields);
         if(!parsed || !parsed.rmaNumber || !parsed.itemNumber){
-          throw new Error('Could not find an RMA number and item on this file. Make sure it\'s the Open RMA Report export.');
+          throw new Error('Could not find an RMA number and item on this file. Make sure it\'s the Open RMA Report or RMA Receipts History Report export.');
         }
         openPreview(parsed);
       }catch(err){
