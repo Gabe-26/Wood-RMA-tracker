@@ -500,7 +500,10 @@
             <div id="e_statusSummary" style="margin-top:6px;"></div>
           </div>
           <div class="field"><label>Qty on hand</label><input id="e_qty" type="number" min="0" step="1"></div>
-          <div class="field"><label>Reused on SO # (if applicable)</label><input id="e_reusedSO"></div>
+          <div class="field">
+            <label>Reused / Scrapped</label>
+            <button type="button" class="btn secondary" id="markUnitsBtn" style="width:100%;" title="Move some of the qty on hand to Reused or Scrapped, on this same record">Mark quantity…</button>
+          </div>
           <div class="field"><label>Location / bin</label><input id="e_location"></div>
           <div class="field full"><label>Notes</label><textarea id="e_notes" rows="3"></textarea></div>
           <div class="field full">
@@ -519,7 +522,6 @@
     </div>
     <div class="modal-actions">
       <button class="btn danger" id="deleteRecordBtn">Delete item</button>
-      <button class="btn secondary" id="markUnitsBtn" title="Move some of the qty on hand to Reused or Scrapped, on this same record">Mark some as reused/scrapped</button>
       <button class="btn secondary" id="cancelEditBtn">Cancel</button>
       <button class="btn" id="saveEditBtn">Save changes</button>
     </div>
@@ -1555,7 +1557,6 @@
     // nothing left) — this summary shows the fuller picture underneath.
     document.getElementById('e_statusSummary').innerHTML = statusCellHtml(r);
     document.getElementById('e_qty').value = r.qtyOnHand || 0;
-    document.getElementById('e_reusedSO').value = r.reusedSO || '';
     document.getElementById('e_location').value = r.location || '';
     renderEditHistory(r);
     document.getElementById('e_notes').value = r.notes || '';
@@ -1582,7 +1583,6 @@
       subType: document.getElementById('e_subType').value.trim(),
       status: document.getElementById('e_status').value,
       qtyOnHand: parseFloat(document.getElementById('e_qty').value) || 0,
-      reusedSO: document.getElementById('e_reusedSO').value.trim(),
       location: document.getElementById('e_location').value.trim(),
       notes: document.getElementById('e_notes').value.trim(),
       lastEditedBy: currentUser || 'Unknown',
