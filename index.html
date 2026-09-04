@@ -187,6 +187,9 @@
   }
   .manage-col li button{ background:none; border:none; color: var(--brick); cursor:pointer; font-size: 12px; }
   .manage-add{ display:flex; gap:6px; margin-top: 4px; }
+  .history-list{ list-style:none; padding:0; margin:6px 0 0; }
+  .history-list li{ padding:5px 0; border-bottom:1px solid var(--line-soft); font-size:13px; }
+  .history-list li:last-child{ border-bottom:none; }
   .manage-add input{ flex:1; border:1px solid var(--line); padding: 6px 8px; }
 
   .overlay{
@@ -488,6 +491,10 @@
       <div class="field"><label>Qty on hand</label><input id="e_qty" type="number" min="0" step="1"></div>
       <div class="field"><label>Reused on SO # (if applicable)</label><input id="e_reusedSO"></div>
       <div class="field"><label>Location / bin</label><input id="e_location"></div>
+      <div class="field full" id="e_historyWrap" style="display:none;">
+        <label>Reuse / scrap history</label>
+        <ul id="e_historyList" class="history-list"></ul>
+      </div>
       <div class="field full"><label>Notes</label><textarea id="e_notes" rows="3"></textarea></div>
       <div class="field full">
         <label>Photos &amp; files</label>
@@ -1500,6 +1507,25 @@
   });
 
   // ---------- Edit modal ----------
+  function renderEditHistory(r){
+    const wrap = document.getElementById('e_historyWrap');
+    const list = document.getElementById('e_historyList');
+    const hist = r.history || [];
+    list.innerHTML = '';
+    if(!hist.length){
+      wrap.style.display = 'none';
+      return;
+    }
+    wrap.style.display = 'block';
+    hist.slice().sort((a,b)=> (b.at||0) - (a.at||0)).forEach(entry=>{
+      const li = document.createElement('li');
+      const soText = entry.so ? (' on SO ' + escapeHtml(entry.so)) : '';
+      li.innerHTML = entry.qty + ' ' + (entry.type === 'reused' ? 'reused' : 'scrapped') + soText
+        + ' <span class="muted">— ' + escapeHtml(entry.by || 'Unknown') + ', ' + new Date(entry.at).toLocaleString() + '</span>';
+      list.appendChild(li);
+    });
+  }
+
   function openEdit(id){
     const r = records.find(x=>x.id===id);
     if(!r) return;
@@ -1514,6 +1540,7 @@
     document.getElementById('e_qty').value = r.qtyOnHand || 0;
     document.getElementById('e_reusedSO').value = r.reusedSO || '';
     document.getElementById('e_location').value = r.location || '';
+    renderEditHistory(r);
     document.getElementById('e_notes').value = r.notes || '';
     document.getElementById('e_photoStatus').textContent = '';
     editingPhotos = (r.photos || []).slice();
@@ -1614,11 +1641,20 @@
     if(wantsReused){
       updates.reusedQty = (r.reusedQty || 0) + n;
       updates.reusedValue = Math.round(((r.reusedValue || 0) + moveValue) * 100) / 100;
-      if(reusedSOInput) updates.reusedSO = reusedSOInput;
     } else {
       updates.scrappedQty = (r.scrappedQty || 0) + n;
       updates.scrappedValue = Math.round(((r.scrappedValue || 0) + moveValue) * 100) / 100;
     }
+    // Recorded here instead of overwriting the single "Reused on SO #" box,
+    // so marking units reused on different SOs at different times doesn't
+    // clobber the previous SO — the full history stays visible on the item.
+    updates.history = (r.history || []).concat([{
+      type: wantsReused ? 'reused' : 'scrapped',
+      qty: n,
+      so: wantsReused ? reusedSOInput : '',
+      by: currentUser || 'Unknown',
+      at: Date.now()
+    }]);
     // Nothing left in storage on this line — the record's overall status
     // now reflects that too, same as flipping it via the Status dropdown.
     if(remainingQty <= 0){
@@ -1629,7 +1665,7 @@
     btn.disabled = true;
     try{
       await db.collection(RECORDS_COL).doc(editingId).update(updates);
-      logActivity('Marked ' + n + ' unit(s) of ' + ref + ' as ' + (wantsReused ? 'Reused' : 'Scrapped'));
+      logActivity('Marked ' + n + ' unit(s) of ' + ref + ' as ' + (wantsReused ? 'Reused' : 'Scrapped') + (reusedSOInput ? ' (SO ' + reusedSOInput + ')' : ''));
       document.getElementById('editOverlay').style.display = 'none';
       editingId = null;
       editingPhotos = [];
