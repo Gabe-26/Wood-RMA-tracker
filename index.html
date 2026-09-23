@@ -198,6 +198,11 @@
     .edit-history-panel{ border-top:none; border-left:1px solid var(--line); padding:0 0 0 22px; }
     .edit-history-panel label{ margin-top:0; }
   }
+  .checkbox-group{ display:flex; flex-direction:column; gap:5px; }
+  .field .checkbox-group label{
+    text-transform:none; letter-spacing:normal; font-size:13.5px; color:var(--ink);
+    display:flex; align-items:center; gap:6px; margin:0; font-weight:400;
+  }
   .manage-add input{ flex:1; border:1px solid var(--line); padding: 6px 8px; }
 
   .overlay{
@@ -392,6 +397,7 @@
           <button class="btn secondary" id="clearFiltersBtn">Clear filters</button>
         </div>
         <div class="field" style="margin-left:auto;">
+          <button class="btn secondary" id="openReportBtn">Run report</button>
           <button class="btn secondary" id="printBtn">Print / save PDF</button>
         </div>
       </div>
@@ -575,6 +581,56 @@
     </div>
     <div class="modal-actions">
       <button class="btn secondary" id="closeStorageLookupBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay no-print" id="reportOverlay" style="display:none;">
+  <div class="modal" style="max-width:960px;">
+    <h2>Run report</h2>
+    <p class="hint">Pick what to include, then run the report. Qty shows how much of each line's original quantity currently falls under the statuses you've picked.</p>
+    <div class="filter-row" style="align-items:flex-start;">
+      <div class="field">
+        <label>Category</label>
+        <div class="checkbox-group" id="rep_category">
+          <label><input type="checkbox" value="Fence" checked> Fence</label>
+          <label><input type="checkbox" value="Gate" checked> Gate</label>
+          <label><input type="checkbox" value="Post" checked> Post</label>
+        </div>
+      </div>
+      <div class="field">
+        <label>Status</label>
+        <div class="checkbox-group" id="rep_status">
+          <label><input type="checkbox" value="awaiting" checked> Awaiting receipt</label>
+          <label><input type="checkbox" value="storage" checked> In storage</label>
+          <label><input type="checkbox" value="reused" checked> Reused</label>
+          <label><input type="checkbox" value="scrapped" checked> Scrapped</label>
+        </div>
+      </div>
+      <div class="field">
+        <label>Sub-type (optional)</label>
+        <select id="rep_subType"><option value="">All</option></select>
+      </div>
+    </div>
+    <div class="modal-actions" style="justify-content:flex-start;">
+      <button class="btn" id="runReportBtn">Run report</button>
+    </div>
+    <div style="overflow:auto; max-height: 45vh; margin-top:14px;">
+      <table id="reportTable">
+        <thead>
+          <tr>
+            <th>RMA #</th><th>Date</th><th>Item #</th><th>Description</th><th>Category</th><th>Sub-type</th><th>Qty</th>
+          </tr>
+        </thead>
+        <tbody id="reportBody"></tbody>
+      </table>
+      <div class="empty-state" id="reportEmpty" style="display:none;">
+        <strong>No matches</strong>
+        Try different filters, then run the report again.
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn secondary" id="closeReportBtn">Close</button>
     </div>
   </div>
 </div>
@@ -1185,12 +1241,31 @@
   function valueReused(r){ return (r.reusedValue || 0) + (r.status === 'reused' ? remainderValue(r) : 0); }
   function valueScrapped(r){ return (r.scrappedValue || 0) + (r.status === 'scrapped' ? remainderValue(r) : 0); }
 
+  // The original total quantity a line ever had, reconstructed from what's
+  // still on hand plus whatever's since been marked reused/scrapped from it.
+  function originalQtyFor(r){
+    return (r.qtyOnHand || 0) + (r.scrappedQty || 0) + (r.reusedQty || 0);
+  }
+
   // Per-unit value, derived from what's still unaccounted-for divided across
   // whatever's still on hand plus whatever's already been marked — works for
   // brand-new records (no scrappedQty/reusedQty yet) and ones with history.
   function getUnitValue(r){
-    const originalQty = (r.qtyOnHand || 0) + (r.scrappedQty || 0) + (r.reusedQty || 0);
+    const originalQty = originalQtyFor(r);
     return originalQty > 0 ? (r.extension || 0) / originalQty : 0;
+  }
+
+  // How much of a line's original quantity currently sits under a given
+  // status — same accounting the stat strip uses, so a report and the stat
+  // totals never disagree. Falls back to qtyOnHand for records that were
+  // flipped straight to Reused/Scrapped via the Status dropdown and never
+  // went through "Mark quantity" (so *Qty is still 0).
+  function qtyForStatus(r, statusKey){
+    if(statusKey === 'awaiting') return r.status === 'awaiting' ? (r.qtyOnHand || 0) : 0;
+    if(statusKey === 'storage') return r.status === 'storage' ? (r.qtyOnHand || 0) : 0;
+    if(statusKey === 'reused') return (r.reusedQty || 0) + (r.status === 'reused' && !r.reusedQty ? (r.qtyOnHand || 0) : 0);
+    if(statusKey === 'scrapped') return (r.scrappedQty || 0) + (r.status === 'scrapped' && !r.scrappedQty ? (r.qtyOnHand || 0) : 0);
+    return 0;
   }
 
   // Once a record's status fully flips to Reused/Scrapped, qtyOnHand no
@@ -1288,6 +1363,74 @@
     renderInventory();
   });
   document.getElementById('printBtn').addEventListener('click', ()=> window.print());
+
+  // ---------- Run report ----------
+  function reportSelectedCategories(){
+    return Array.from(document.querySelectorAll('#rep_category input:checked')).map(el=>el.value);
+  }
+  function reportSelectedStatuses(){
+    return Array.from(document.querySelectorAll('#rep_status input:checked')).map(el=>el.value);
+  }
+
+  function updateReportSubTypeOptions(){
+    const cats = reportSelectedCategories();
+    const sel = document.getElementById('rep_subType');
+    const current = sel.value;
+    const pool = cats.length ? cats.flatMap(c => subTypes[c] || []) : Object.values(subTypes).flat();
+    sel.innerHTML = '<option value="">All</option>' +
+      Array.from(new Set(pool)).sort().map(s=>`<option ${s===current?'selected':''}>${escapeHtml(s)}</option>`).join('');
+  }
+
+  function runReport(){
+    const cats = reportSelectedCategories();
+    // An empty status selection is treated the same as "all statuses" —
+    // matches how an empty category/sub-type selection already means "All"
+    // elsewhere in the app, rather than silently returning zero rows.
+    const statusesChecked = reportSelectedStatuses();
+    const statuses = statusesChecked.length ? statusesChecked : ['awaiting','storage','reused','scrapped'];
+    const subType = document.getElementById('rep_subType').value;
+
+    const rows = records.map(r=>{
+      if(cats.length && !cats.includes(r.category)) return null;
+      if(subType && r.subType !== subType) return null;
+      const matchedQty = statuses.reduce((sum, s) => sum + qtyForStatus(r, s), 0);
+      if(matchedQty <= 0) return null;
+      return { r, matchedQty, originalQty: originalQtyFor(r) };
+    }).filter(Boolean);
+
+    rows.sort((a,b)=> new Date(b.r.rmaDate||0).getTime() - new Date(a.r.rmaDate||0).getTime());
+
+    const body = document.getElementById('reportBody');
+    body.innerHTML = '';
+    document.getElementById('reportEmpty').style.display = rows.length ? 'none' : 'block';
+    rows.forEach(({r, matchedQty, originalQty})=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.rmaNumber)}</td>
+        <td>${escapeHtml(r.rmaDate)}</td>
+        <td>${escapeHtml(r.itemNumber)}</td>
+        <td class="desc-cell">${escapeHtml(r.description)}</td>
+        <td>${escapeHtml(r.category)}</td>
+        <td>${escapeHtml(r.subType) || '<span class="muted">—</span>'}</td>
+        <td>${matchedQty} of ${originalQty} ${escapeHtml(r.um||'')}</td>
+      `;
+      body.appendChild(tr);
+    });
+  }
+
+  document.getElementById('openReportBtn').addEventListener('click', ()=>{
+    updateReportSubTypeOptions();
+    document.getElementById('reportBody').innerHTML = '';
+    document.getElementById('reportEmpty').style.display = 'none';
+    document.getElementById('reportOverlay').style.display = 'flex';
+  });
+  document.querySelectorAll('#rep_category input').forEach(cb=>{
+    cb.addEventListener('change', updateReportSubTypeOptions);
+  });
+  document.getElementById('runReportBtn').addEventListener('click', runReport);
+  document.getElementById('closeReportBtn').addEventListener('click', ()=>{
+    document.getElementById('reportOverlay').style.display = 'none';
+  });
 
   // Clicking a "X in storage" stat block opens a self-contained lookup
   // modal, preset to that category + In storage, with its own filters —
