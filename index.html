@@ -245,11 +245,25 @@
     .edit-history-panel{ border-top:none; border-left:1px solid var(--line); padding:0 0 0 22px; }
     .edit-history-panel label{ margin-top:0; }
   }
-  .checkbox-group{ display:flex; flex-direction:column; gap:5px; }
-  .field .checkbox-group label{
-    text-transform:none; letter-spacing:normal; font-size:13.5px; color:var(--ink);
-    display:flex; align-items:center; gap:6px; margin:0; font-weight:400;
+  .checkbox-group{ display:flex; flex-direction:column; gap:8px; }
+  .toggle-pill{
+    display:inline-flex; align-items:center; gap:8px; width:fit-content;
+    padding: 5px 14px 5px 5px; border-radius:999px; cursor:pointer;
+    border:1px solid var(--sage); background: var(--sage); color: var(--walnut-ink);
+    font-size:13.5px; font-weight:600; margin:0;
+    transition: background .15s, border-color .15s, color .15s;
   }
+  .toggle-pill input{ position:absolute; opacity:0; width:0; height:0; pointer-events:none; }
+  .toggle-pill .toggle-icon{
+    width:20px; height:20px; border-radius:50%; background:#fff; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1;
+  }
+  .toggle-pill .toggle-icon::before{ content:"✓"; color: var(--sage-dark); }
+  .toggle-pill:has(input:not(:checked)){
+    background: var(--surface-2); border-color: var(--line); color: var(--ink-soft);
+  }
+  .toggle-pill:has(input:not(:checked)) .toggle-icon{ background: var(--ink-soft); }
+  .toggle-pill:has(input:not(:checked)) .toggle-icon::before{ content:"✕"; color: var(--surface-2); }
   .manage-add input{ flex:1; border:1px solid var(--line); background: var(--input-bg); padding: 6px 8px; }
 
   .overlay{
@@ -650,18 +664,18 @@
       <div class="field">
         <label>Category</label>
         <div class="checkbox-group" id="rep_category">
-          <label><input type="checkbox" value="Fence" checked> Fence</label>
-          <label><input type="checkbox" value="Gate" checked> Gate</label>
-          <label><input type="checkbox" value="Post" checked> Post</label>
+          <label class="toggle-pill"><input type="checkbox" value="Fence" checked><span class="toggle-icon"></span><span>Fence</span></label>
+          <label class="toggle-pill"><input type="checkbox" value="Gate" checked><span class="toggle-icon"></span><span>Gate</span></label>
+          <label class="toggle-pill"><input type="checkbox" value="Post" checked><span class="toggle-icon"></span><span>Post</span></label>
         </div>
       </div>
       <div class="field">
         <label>Status</label>
         <div class="checkbox-group" id="rep_status">
-          <label><input type="checkbox" value="awaiting" checked> Awaiting receipt</label>
-          <label><input type="checkbox" value="storage" checked> In storage</label>
-          <label><input type="checkbox" value="reused" checked> Reused</label>
-          <label><input type="checkbox" value="scrapped" checked> Scrapped</label>
+          <label class="toggle-pill"><input type="checkbox" value="awaiting" checked><span class="toggle-icon"></span><span>Awaiting receipt</span></label>
+          <label class="toggle-pill"><input type="checkbox" value="storage" checked><span class="toggle-icon"></span><span>In storage</span></label>
+          <label class="toggle-pill"><input type="checkbox" value="reused" checked><span class="toggle-icon"></span><span>Reused</span></label>
+          <label class="toggle-pill"><input type="checkbox" value="scrapped" checked><span class="toggle-icon"></span><span>Scrapped</span></label>
         </div>
       </div>
       <div class="field">
