@@ -630,6 +630,7 @@
       </div>
     </div>
     <div class="modal-actions">
+      <button class="btn secondary" id="printReportBtn">Print report</button>
       <button class="btn secondary" id="closeReportBtn">Close</button>
     </div>
   </div>
@@ -1430,6 +1431,49 @@
   document.getElementById('runReportBtn').addEventListener('click', runReport);
   document.getElementById('closeReportBtn').addEventListener('click', ()=>{
     document.getElementById('reportOverlay').style.display = 'none';
+  });
+
+  // The report lives in a "no-print" overlay, so the page's own print CSS
+  // would hide it — instead this opens the current results in a fresh
+  // window with its own minimal print styling and triggers print on that.
+  function reportCriteriaSummary(){
+    const cats = reportSelectedCategories();
+    const catText = (cats.length === 0 || cats.length === 3) ? 'All categories' : cats.join(', ');
+    const statuses = reportSelectedStatuses();
+    const statusText = (statuses.length === 0 || statuses.length === 4) ? 'All statuses' : statuses.map(s=>STATUS_LABELS[s]).join(', ');
+    const subType = document.getElementById('rep_subType').value;
+    return catText + ' • ' + statusText + ' • ' + (subType || 'All sub-types');
+  }
+
+  document.getElementById('printReportBtn').addEventListener('click', ()=>{
+    if(!document.getElementById('reportBody').children.length){
+      alert('Run the report first, then print it.');
+      return;
+    }
+    const win = window.open('', '_blank');
+    if(!win){
+      alert('Your browser blocked the print window. Allow pop-ups for this page and try again.');
+      return;
+    }
+    win.document.write(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Wood RMA Tracker — Report</title>
+<style>
+  body{ font-family: system-ui, sans-serif; padding: 28px; color:#2b241d; }
+  h1{ font-size: 19px; margin: 0 0 4px; }
+  p.meta{ color:#6b6152; font-size:12px; margin:0 0 22px; }
+  table{ width:100%; border-collapse: collapse; font-size: 12.5px; }
+  th{ text-align:left; border-bottom:2px solid #2b241d; padding:6px 8px; }
+  td{ padding:6px 8px; border-bottom:1px solid #ddd; }
+  .muted{ color:#6b6152; }
+</style></head>
+<body>
+  <h1>Wood RMA Tracker — Report</h1>
+  <p class="meta">${escapeHtml(reportCriteriaSummary())} — generated ${new Date().toLocaleString()}</p>
+  ${document.getElementById('reportTable').outerHTML}
+</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
   });
 
   // Clicking a "X in storage" stat block opens a self-contained lookup
