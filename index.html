@@ -9,20 +9,60 @@
 <link href="https://fonts.googleapis.com/css2?family=Zilla+Slab:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
   :root{
+    /* Dark theme (default) — modeled on the look of Gabriel's ProdTrack app:
+       near-black surfaces, a signature neon accent, and warm semantic colors
+       for status/category coding. Toggled to light via [data-theme="light"]
+       below, which restores the tracker's original warm cream palette. */
+    --bg: #0b0d0e;
+    --surface: #141718;
+    --surface-2: #1c2022;
+    --header-bg: #08090a;
+    --ink: #eef1ef;
+    --ink-soft: #8b9296;
+    --header-ink: #f5f7f6;
+    --header-ink-soft: #9aa3a6;
+    --walnut: #c6ff4d;
+    --walnut-dark: #a8d93e;
+    --walnut-ink: #0b0d0e;
+    --sage: #b6f23a;
+    --sage-dark: #93c92e;
+    --amber: #f0a63f;
+    --brick: #ef5b5b;
+    --focus: #5b8cff;
+    --line: #262b2d;
+    --line-soft: #1e2224;
+    --input-bg: #101314;
+    --amber-rgb: 240,166,63;
+    --sage-rgb: 182,242,58;
+    --brick-rgb: 239,91,91;
+    --focus-rgb: 91,140,255;
+    --overlay-rgb: 0,0,0;
+  }
+  :root[data-theme="light"]{
     --bg: #e9e2cf;
     --surface: #fbf9f2;
     --surface-2: #f3eee0;
+    --header-bg: #4a3728;
     --ink: #2b241d;
     --ink-soft: #6b6152;
+    --header-ink: #f7f1e2;
+    --header-ink-soft: #cbb894;
     --walnut: #4a3728;
     --walnut-dark: #362819;
+    --walnut-ink: #f1e9d8;
     --sage: #66795a;
     --sage-dark: #4c5c43;
     --amber: #a97a2e;
     --brick: #8c4a34;
+    --focus: #2f6f8f;
     --line: #d6cbac;
     --line-soft: #e3dac2;
-    --focus: #2f6f8f;
+    --input-bg: #fff;
+    --amber-rgb: 169,122,46;
+    --sage-rgb: 102,121,90;
+    --brick-rgb: 140,74,52;
+    --focus-rgb: 47,111,143;
+    --overlay-rgb: 43,36,29;
   }
   *{box-sizing:border-box;}
   body{margin:0;}
@@ -41,45 +81,46 @@
   :focus-visible{ outline: 2px solid var(--focus); outline-offset: 2px; }
 
   header.app-header{
-    background: var(--walnut);
-    color: #f1e9d8;
+    background: var(--header-bg);
+    color: var(--header-ink);
     padding: 22px clamp(16px, 4vw, 40px) 0;
+    border-bottom: 1px solid var(--line);
   }
   header.app-header .title-row{
     display:flex; align-items:baseline; gap: 14px; flex-wrap: wrap;
   }
   header.app-header h1{
-    margin: 0; font-size: 26px; color: #f7f1e2;
+    margin: 0; font-size: 26px; color: var(--header-ink);
   }
   header.app-header .subtitle{
-    margin: 2px 0 18px; color: #cbb894; font-size: 13.5px;
+    margin: 2px 0 18px; color: var(--header-ink-soft); font-size: 13.5px;
   }
-  .user-badge strong{ color: #f7f1e2; }
+  .user-badge strong{ color: var(--header-ink); }
   .link-btn{
     background:none; border:none; color: inherit; text-decoration: underline;
     cursor:pointer; font-size: inherit; padding: 0;
   }
-  .link-btn:hover{ color: #f7f1e2; }
+  .link-btn:hover{ color: var(--header-ink); }
   .conn-status{
     display:inline-block; font-size: 11.5px; padding: 3px 10px; margin-left: 4px;
-    border: 1px solid; vertical-align: middle; font-weight:600; border-radius: 2px;
+    border: 1px solid; vertical-align: middle; font-weight:600; border-radius: 999px;
   }
-  .conn-status.connecting{ color:#e8dcc0; border-color:#a97a2e; background: rgba(169,122,46,.2); }
-  .conn-status.online{ color:#c9e3cf; border-color:#66795a; background: rgba(102,121,90,.25); }
-  .conn-status.offline{ color:#f0c9c9; border-color:#8c4a34; background: rgba(140,74,52,.3); }
+  .conn-status.connecting{ color:var(--amber); border-color:var(--amber); background: rgba(var(--amber-rgb),.15); }
+  .conn-status.online{ color:var(--sage); border-color:var(--sage); background: rgba(var(--sage-rgb),.15); }
+  .conn-status.offline{ color:var(--brick); border-color:var(--brick); background: rgba(var(--brick-rgb),.15); }
   nav.tabs{
     display:flex; gap: 4px; margin-top: 14px;
   }
   nav.tabs button{
     background: none; border: none; cursor: pointer;
-    color: #d9c9a8; padding: 10px 16px 12px;
+    color: var(--header-ink-soft); padding: 10px 16px 12px;
     font-size: 14.5px; font-weight: 500;
     border-bottom: 3px solid transparent;
     transition: color .15s, border-color .15s;
   }
-  nav.tabs button:hover{ color: #f7f1e2; }
+  nav.tabs button:hover{ color: var(--header-ink); }
   nav.tabs button.active{
-    color: #f7f1e2; border-bottom-color: var(--amber);
+    color: var(--header-ink); border-bottom-color: var(--sage);
   }
 
   main{
@@ -92,7 +133,7 @@
 
   .stat-strip{
     display:flex; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line);
-    margin-bottom: 20px;
+    margin-bottom: 20px; border-radius: 8px; overflow: hidden;
   }
   .stat-block{
     flex: 1; padding: 14px 18px; border-left: 4px solid var(--line);
@@ -106,13 +147,19 @@
   .stat-block.reused{ border-left-color: var(--focus); }
   .stat-block.scrapped{ border-left-color: var(--brick); }
   .stat-block .num{ font-family:'Zilla Slab',serif; font-size: 26px; font-weight: 700; line-height:1; }
+  .stat-block.fence .num{ color: var(--walnut); }
+  .stat-block.gate .num{ color: var(--sage); }
+  .stat-block.post .num{ color: var(--amber); }
+  .stat-block.value .num{ color: var(--sage); }
+  .stat-block.reused .num{ color: var(--focus); }
+  .stat-block.scrapped .num{ color: var(--brick); }
   .stat-block .lbl{ font-size: 12px; color: var(--ink-soft); margin-top: 5px; }
   .stat-block[data-stat-category]{ cursor: pointer; }
   .stat-block[data-stat-category]:hover{ background: var(--surface-2); }
 
   .card{
     background: var(--surface); border: 1px solid var(--line);
-    padding: 18px 20px; margin-bottom: 18px;
+    padding: 18px 20px; margin-bottom: 18px; border-radius: 8px;
   }
   .card h2{ margin: 0 0 4px; font-size: 19px; }
   .card .hint{ color: var(--ink-soft); font-size: 13px; margin: 0 0 14px; }
@@ -125,18 +172,18 @@
   .field{ display:flex; flex-direction:column; gap:4px; }
   .field label{ font-size: 11.5px; text-transform: uppercase; letter-spacing:.05em; color: var(--ink-soft); }
   .field input, .field select, .field textarea{
-    background: #fff; border: 1px solid var(--line); padding: 7px 9px; min-width: 120px;
+    background: var(--input-bg); border: 1px solid var(--line); padding: 7px 9px; min-width: 120px;
   }
   .field textarea{ min-width: 260px; }
   .btn{
-    background: var(--walnut); color: #f1e9d8; border: none;
-    padding: 8px 16px; cursor:pointer; font-weight: 500;
+    background: var(--walnut); color: var(--walnut-ink); border: none;
+    padding: 8px 16px; cursor:pointer; font-weight: 500; border-radius: 6px;
   }
   .btn:hover{ background: var(--walnut-dark); }
   .btn.secondary{ background: none; color: var(--walnut); border: 1px solid var(--walnut); }
   .btn.secondary:hover{ background: var(--surface-2); }
   .btn.danger{ background: none; color: var(--brick); border: 1px solid var(--brick); }
-  .btn.danger:hover{ background: #f5e8e2; }
+  .btn.danger:hover{ background: rgba(var(--brick-rgb),.15); }
   .btn.small{ padding: 4px 9px; font-size: 12.5px; }
   .btn:disabled{ opacity:.45; cursor:not-allowed; }
 
@@ -153,14 +200,14 @@
   .muted{ color: var(--ink-soft); }
 
   .chip{
-    display:inline-block; padding: 2px 8px; font-size: 11.5px; font-weight:600;
-    border: 1px solid; white-space:nowrap;
+    display:inline-block; padding: 2px 10px; font-size: 11.5px; font-weight:600;
+    border: 1px solid; white-space:nowrap; border-radius: 999px;
   }
-  .chip.awaiting{ color: var(--amber); border-color: var(--amber); background: #f7ecd9; }
-  .chip.storage{ color: var(--sage-dark); border-color: var(--sage); background: #eaeee4; }
-  .chip.reused{ color: var(--focus); border-color: var(--focus); background: #e5eef2; }
-  .chip.scrapped{ color: var(--brick); border-color: var(--brick); background: #f5e8e2; }
-  .chip.auto{ color: var(--ink-soft); border-color: var(--line); background: #fff; font-weight:500; }
+  .chip.awaiting{ color: var(--amber); border-color: var(--amber); background: rgba(var(--amber-rgb),.15); }
+  .chip.storage{ color: var(--sage-dark); border-color: var(--sage); background: rgba(var(--sage-rgb),.15); }
+  .chip.reused{ color: var(--focus); border-color: var(--focus); background: rgba(var(--focus-rgb),.15); }
+  .chip.scrapped{ color: var(--brick); border-color: var(--brick); background: rgba(var(--brick-rgb),.15); }
+  .chip.auto{ color: var(--ink-soft); border-color: var(--line); background: var(--input-bg); font-weight:500; }
 
   .actions-cell{ white-space: nowrap; }
   .actions-cell button{ margin-right: 4px; }
@@ -203,14 +250,14 @@
     text-transform:none; letter-spacing:normal; font-size:13.5px; color:var(--ink);
     display:flex; align-items:center; gap:6px; margin:0; font-weight:400;
   }
-  .manage-add input{ flex:1; border:1px solid var(--line); padding: 6px 8px; }
+  .manage-add input{ flex:1; border:1px solid var(--line); background: var(--input-bg); padding: 6px 8px; }
 
   .overlay{
-    position: fixed; inset:0; background: rgba(43,36,29,.45);
+    position: fixed; inset:0; background: rgba(var(--overlay-rgb),.5);
     display:flex; align-items:center; justify-content:center; z-index: 50; padding: 20px;
   }
   .modal{
-    background: var(--surface); border: 1px solid var(--line);
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     max-width: 560px; width:100%; max-height: 90vh; overflow:auto; padding: 22px 24px;
   }
   .modal h2{ margin-top:0; }
@@ -228,7 +275,7 @@
   }
   .file-chip{
     position:relative; width:130px; height:84px; border:1px solid var(--line);
-    background:#fff; padding:8px; display:flex; flex-direction:column; justify-content:flex-end;
+    background:var(--surface); padding:8px; display:flex; flex-direction:column; justify-content:flex-end;
   }
   .file-chip .file-icon{ font-size: 20px; line-height:1; margin-bottom:4px; }
   .file-chip .file-name{
@@ -249,6 +296,16 @@
   .empty-state strong{ display:block; color: var(--ink); font-size: 16px; margin-bottom: 6px; }
 
   @media print{
+    /* Printing should always come out light/readable on paper, regardless of
+       which theme is active on screen — this re-forces the light palette. */
+    :root{
+      --bg: #ffffff; --surface: #ffffff; --surface-2: #f3eee0;
+      --ink: #2b241d; --ink-soft: #6b6152;
+      --walnut: #4a3728; --sage: #66795a; --sage-dark: #4c5c43;
+      --amber: #a97a2e; --brick: #8c4a34; --focus: #2f6f8f;
+      --line: #d6cbac; --line-soft: #e3dac2;
+      --amber-rgb: 169,122,46; --sage-rgb: 102,121,90; --brick-rgb: 140,74,52; --focus-rgb: 47,111,143;
+    }
     header.app-header, .no-print{ display:none !important; }
     body{ background:#fff; }
     main{ padding:0; max-width:none; }
@@ -265,7 +322,7 @@
     <span id="connStatus" class="conn-status connecting">Connecting…</span>
   </div>
   <p class="subtitle">Amendola Industries — logging returned wood stock and what's reusable for future orders
-    <span class="user-badge">· Logged in as <strong id="userName">—</strong> · <button id="switchUserBtn" class="link-btn">Switch</button></span>
+    <span class="user-badge">· Logged in as <strong id="userName">—</strong> · <button id="switchUserBtn" class="link-btn">Switch</button> · <button id="themeToggleBtn" class="link-btn">☀️ Light mode</button></span>
   </p>
   <nav class="tabs">
     <button data-tab="import" class="active">Import RMA</button>
@@ -667,6 +724,12 @@
   const LEGACY_RECORDS_KEY = 'aii_wood_rma_records_v1';
   const LEGACY_SUBTYPES_KEY = 'aii_wood_rma_subtypes_v1';
   const USERNAME_KEY = 'aii_wood_rma_username';
+  const THEME_KEY = 'aii_wood_rma_theme';
+
+  // Applied first, before anything else, so the page never flashes the
+  // wrong theme on load. Defaults to dark (the ProdTrack-styled look).
+  let currentTheme = localStorage.getItem(THEME_KEY) || 'dark';
+  document.documentElement.setAttribute('data-theme', currentTheme);
 
   let db = null, auth = null;
   let records = [];
@@ -716,6 +779,18 @@
   document.getElementById('switchUserBtn').addEventListener('click', showNameOverlay);
   updateUserBadge();
   if(!currentUser) showNameOverlay();
+
+  // ---------- Light/dark mode ----------
+  function updateThemeToggleLabel(){
+    document.getElementById('themeToggleBtn').textContent = currentTheme === 'dark' ? '☀️ Light mode' : '🌙 Dark mode';
+  }
+  updateThemeToggleLabel();
+  document.getElementById('themeToggleBtn').addEventListener('click', ()=>{
+    currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', currentTheme);
+    localStorage.setItem(THEME_KEY, currentTheme);
+    updateThemeToggleLabel();
+  });
 
   // Every meaningful write also drops a line here so Gabriel can trace who did what.
   function logActivity(summary){
