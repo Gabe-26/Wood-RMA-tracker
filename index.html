@@ -468,6 +468,7 @@
           <button class="btn secondary" id="clearFiltersBtn">Clear filters</button>
         </div>
         <div class="field" style="margin-left:auto;">
+          <button class="btn" id="openAddBtn">Add inventory</button>
           <button class="btn secondary" id="openReportBtn">Run report</button>
           <button class="btn secondary" id="printBtn">Print / save PDF</button>
         </div>
@@ -652,6 +653,34 @@
     </div>
     <div class="modal-actions">
       <button class="btn secondary" id="closeStorageLookupBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay no-print" id="addOverlay" style="display:none;">
+  <div class="modal" style="max-width:640px;">
+    <h2>Add inventory</h2>
+    <p class="hint">For stock that's already in storage but has no RMA number. It shows up in the inventory, stats, and reports like any other line.</p>
+    <div class="import-grid">
+      <div class="field full"><label>Description</label><input id="a_description" placeholder="e.g. 6x8 Cedar Spaced Picket Section"></div>
+      <div class="field">
+        <label>Category</label>
+        <select id="a_category"><option>Fence</option><option>Gate</option><option>Post</option></select>
+      </div>
+      <div class="field"><label>Sub-type</label><select id="a_subType"><option value="">— Select —</option></select></div>
+      <div class="field"><label>Item number (optional)</label><input id="a_itemNumber"></div>
+      <div class="field"><label>Customer / where it came from (optional)</label><input id="a_source"></div>
+      <div class="field"><label>Qty</label><input id="a_qty" type="number" min="1" step="1" value="1"></div>
+      <div class="field"><label>Unit of measure (optional)</label><input id="a_um" placeholder="e.g. EA"></div>
+      <div class="field"><label>Value per unit, $ (optional)</label><input id="a_unitValue" type="number" min="0" step="0.01"></div>
+      <div class="field"><label>Date added</label><input id="a_date" type="date"></div>
+      <div class="field full"><label>Location / bin (optional)</label><input id="a_location" placeholder="e.g. Wood rack B3"></div>
+      <div class="field full"><label>Notes</label><textarea id="a_notes" rows="2"></textarea></div>
+    </div>
+    <p class="hint" style="margin:0;">Photos and files can be added afterward from the Edit button on the item.</p>
+    <div class="modal-actions">
+      <button class="btn secondary" id="cancelAddBtn">Cancel</button>
+      <button class="btn" id="saveAddBtn">Add to inventory</button>
     </div>
   </div>
 </div>
@@ -1411,7 +1440,7 @@
     list.forEach(r=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${escapeHtml(r.rmaNumber)}</td>
+        <td>${escapeHtml(r.rmaNumber) || '<span class="muted">No RMA</span>'}</td>
         <td>${escapeHtml(r.rmaDate)}</td>
         <td>${escapeHtml(r.customerName)}</td>
         <td>${escapeHtml(r.itemNumber)}</td>
@@ -1453,6 +1482,77 @@
     renderInventory();
   });
   document.getElementById('printBtn').addEventListener('click', ()=> window.print());
+
+  // ---------- Add inventory manually (no RMA number) ----------
+  // Builds the same record shape an import produces, with rmaNumber left
+  // blank, so every existing feature (stats, reports, Mark quantity, edit)
+  // treats it like any other line. manualEntry:true just marks where it came from.
+  function todayIso(){
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+  function isoToUs(iso){
+    const parts = (iso || todayIso()).split('-');
+    return parseInt(parts[1],10) + '/' + parseInt(parts[2],10) + '/' + parts[0];
+  }
+
+  document.getElementById('openAddBtn').addEventListener('click', ()=>{
+    ['a_description','a_itemNumber','a_source','a_um','a_unitValue','a_location','a_notes'].forEach(id=>{
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('a_category').value = 'Fence';
+    fillSubTypeList('a_subType', 'Fence');
+    document.getElementById('a_qty').value = '1';
+    document.getElementById('a_date').value = todayIso();
+    document.getElementById('addOverlay').style.display = 'flex';
+    document.getElementById('a_description').focus();
+  });
+  document.getElementById('a_category').addEventListener('change', e=>{
+    fillSubTypeList('a_subType', e.target.value);
+  });
+  document.getElementById('cancelAddBtn').addEventListener('click', ()=>{
+    document.getElementById('addOverlay').style.display = 'none';
+  });
+  document.getElementById('saveAddBtn').addEventListener('click', async ()=>{
+    if(!db) return;
+    const description = document.getElementById('a_description').value.trim();
+    const qty = parseFloat(document.getElementById('a_qty').value);
+    if(!description){ alert('Enter a description.'); return; }
+    if(!qty || qty <= 0){ alert('Enter a quantity greater than 0.'); return; }
+    const unitValue = parseFloat(document.getElementById('a_unitValue').value) || 0;
+    const now = Date.now();
+    const who = currentUser || 'Unknown';
+    const record = {
+      rmaNumber: '', rmaDate: isoToUs(document.getElementById('a_date').value),
+      customerCode: '', customerName: document.getElementById('a_source').value.trim(),
+      sourceStatus: '', expireDate: '',
+      itemNumber: document.getElementById('a_itemNumber').value.trim(),
+      description, crossShip: '', warehouse: '',
+      um: document.getElementById('a_um').value.trim(),
+      returnQty: qty, receivedQty: qty, remainingQty: 0,
+      price: unitValue, extension: Math.round(unitValue * qty * 100) / 100,
+      originalInvoice: '', salesperson: '', reason: '', itemAction: '', customerAction: '',
+      restockingCharge: '', rmaTotal: '', comment: '',
+      category: document.getElementById('a_category').value,
+      subType: document.getElementById('a_subType').value.trim(),
+      status: 'storage', qtyOnHand: qty,
+      location: document.getElementById('a_location').value.trim(),
+      notes: document.getElementById('a_notes').value.trim(),
+      reusedSO: '', photos: [], files: [], manualEntry: true,
+      loggedAt: now, loggedBy: who, lastEditedBy: who, lastEditedAt: now
+    };
+    const btn = document.getElementById('saveAddBtn');
+    btn.disabled = true;
+    try{
+      await db.collection(RECORDS_COL).add(record);
+      logActivity('Added inventory without RMA: ' + description + ' x' + qty + ' (' + record.category + (record.subType ? ' – ' + record.subType : '') + ')');
+      document.getElementById('addOverlay').style.display = 'none';
+    }catch(err){
+      alert('Could not save: ' + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // ---------- Run report ----------
   function reportSelectedCategories(){
@@ -1496,7 +1596,7 @@
     rows.forEach(({r, matchedQty, originalQty})=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${escapeHtml(r.rmaNumber)}</td>
+        <td>${escapeHtml(r.rmaNumber) || '<span class="muted">No RMA</span>'}</td>
         <td>${escapeHtml(r.rmaDate)}</td>
         <td>${escapeHtml(r.itemNumber)}</td>
         <td class="desc-cell">${escapeHtml(r.description)}</td>
@@ -1579,7 +1679,7 @@
     list.forEach(r=>{
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td>${escapeHtml(r.rmaNumber)}</td>
+        <td>${escapeHtml(r.rmaNumber) || '<span class="muted">No RMA</span>'}</td>
         <td>${escapeHtml(r.rmaDate)}</td>
         <td>${escapeHtml(r.customerName)}</td>
         <td>${escapeHtml(r.itemNumber)}</td>
@@ -1746,7 +1846,7 @@
 
   function editingRef(){
     const r = records.find(x=>x.id===editingId);
-    return r ? (r.rmaNumber + ' / ' + r.itemNumber) : 'item';
+    return r ? ((r.rmaNumber || 'No RMA') + ' / ' + (r.itemNumber || 'no item #')) : 'item';
   }
 
   function readFileAsDataURL(file){
@@ -1821,7 +1921,7 @@
     const r = records.find(x=>x.id===id);
     if(!r) return;
     editingId = id;
-    document.getElementById('e_ref').value = r.rmaNumber + ' / ' + r.itemNumber;
+    document.getElementById('e_ref').value = (r.rmaNumber || 'No RMA') + ' / ' + (r.itemNumber || 'no item #');
     document.getElementById('e_loggedBy').value = r.loggedBy || '—';
     document.getElementById('e_lastEditedBy').value = (r.lastEditedBy || '—') + (r.lastEditedAt ? ' · ' + new Date(r.lastEditedAt).toLocaleString() : '');
     document.getElementById('e_category').value = r.category;
