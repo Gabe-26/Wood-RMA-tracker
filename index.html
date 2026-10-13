@@ -522,6 +522,26 @@
         </div>
       </div>
     </div>
+
+    <div class="card">
+      <h2>Item codes</h2>
+      <p class="hint" id="codeStatus"></p>
+      <p class="hint">Upload the updated item code CSV from Sage. New codes are added and changed descriptions are updated — nothing is ever removed. You'll see exactly what will change before it's saved, and everyone sees the new codes right away.</p>
+      <div class="drop-zone" id="codeDropZone">
+        <strong>Drop the item code CSV here</strong><br>
+        or click to browse
+        <input type="file" id="codeFileInput" accept=".csv" style="display:none">
+      </div>
+      <div id="codeImportError" class="hint" style="color:var(--brick); display:none; margin-top:10px;"></div>
+      <div id="codePreview" style="display:none; margin-top:14px;">
+        <div id="codePreviewSummary" style="font-weight:600;"></div>
+        <div id="codePreviewDetails" style="max-height:240px; overflow:auto; margin-top:8px; font-size:13px;"></div>
+        <div class="modal-actions" style="justify-content:flex-start;">
+          <button class="btn" id="applyCodesBtn">Apply changes</button>
+          <button class="btn secondary" id="cancelCodesBtn">Cancel</button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- ACTIVITY PANEL -->
@@ -889,6 +909,12 @@
       updateSubTypeFilterOptions();
     }, err=>{
       setStatus('Sync error — check rules', 'offline');
+      console.error(err);
+    });
+
+    db.collection(SUBTYPES_COL).doc('itemCodes').onSnapshot(doc=>{
+      onItemCodesSnapshot(doc);
+    }, err=>{
       console.error(err);
     });
 
@@ -2988,19 +3014,112 @@
     "WTRL":"*LATCH TRADITIONAL POST WOOD-"
   };
 
+  // Category for each code. Only Gate and Post codes are listed; anything not
+  // listed is Fence. Worked out from the Sage "Prod" line (gate lines, post
+  // lines), the word GATE/POST in the description, and gate-style codes
+  // (e.g. ...G44) because Sage cuts descriptions off at 30 characters.
+  const WOOD_CODE_CATS = {};
+  `
+    WATG44 WATG45 WATG54 WATG55 WATG64 WATG65 WBIRG44 WBIRG45 WBIRG54 WBIRG55 WBIRG64 WBIRG65 WDALG44 WDALG45
+    WDALG54 WDALG55 WDALG64 WDALG65 WDENG44 WDENG45 WDENG54 WDENG55 WDENG64 WDENG65 WGF65 WNORG44 WNORG45 WNORG54
+    WNORG55 WNORG64 WNORG65 WWYG64 WWYG65 CSG-CUS CSG44 CSG44CBR CSG45 CSG45CBR CSG54 CSG54CBR CSG55 CSG55CBR
+    CSG64 CSG64CBR CSG65 CSG65CBR CSG84 CSG84CBR CSG85 CSG85CBR CSSPG44CBR CSSPG45CBR DRC2G4 DRC2G5 DRC3G4 DRC3G5
+    RC2G3 RC2G4 RC2G5 RC3G3 RC3G4 RC3G5 SSG-CUS SSG44 SSG45 SSG54 SSG55 SSG64 SSG65 SSG84 SSG85 W1DLG44 W1DLG45
+    W1DLG54 W1DLG55 W1DLG64 W1DLG65 W1SLG44 W1SLG45 W1SLG54 W1SLG55 W1SLG64 W1SLG65 W2DLG44 W2DLG45 W2DLG54
+    W2DLG55 W2DLG64 W2DLG65 W2KAG34-1 W2KAG35-1 W2KAG44-1 W2KAG45-1 W2KAG54-1 W2KAG55-1 W2SLG44 W2SLG45 W2SLG54
+    W2SLG55 W2SLG64 W2SLG65 W4DLG44 W4DLG45 W4DLG54 W4DLG55 W4DLG64 W4DLG65 W4KAG34-1 W4KAG35-1 W4KAG44-1
+    W4KAG45-1 W4KAG54-1 W4KAG55-1 W4SLG44 W4SLG45 W4SLG54 W4SLG55 W4SLG64 W4SLG65 WATG-CUS WAZG-CUS WAZG34-2
+    WAZG35-2 WAZG44-2 WAZG45-2 WAZG54-2 WAZG55-2 WBIRG-CUS WBWG-CUS WCDR2G3 WCDR2G4 WCDR2G5 WCDR3G3 WCDR3G4
+    WCDR3G5 WCOG-CUS WCOG44 WCOG44-16 WCOG44-16-9 WCOG44-9 WCOG44CBR WCOG44CBR-16 WCOG44CBR-16-9 WCOG44CBR-9
+    WCOG45 WCOG45-16 WCOG45-16-9 WCOG45-9 WCOG45CBR WCOG45CBR-16 WCOG45CBR-16-9 WCOG45CBR-9 WCOG54 WCOG54-16
+    WCOG54-16-9 WCOG54-9 WCOG54CBR WCOG54CBR-16 WCOG54CBR-16-9 WCOG54CBR-9 WCOG55 WCOG55-16 WCOG55-16-9 WCOG55-9
+    WCOG55CBR WCOG55CBR-16 WCOG55CBR-16-9 WCOG55CBR-9 WCOG64 WCOG64-16 WCOG64-16-9 WCOG64-9 WCOG64CBR WCOG64CBR-16
+    WCOG64CBR-16-9 WCOG64CBR-9 WCOG65 WCOG65-16 WCOG65-16-9 WCOG65-9 WCOG65CBR WCOG65CBR-16 WCOG65CBR-16-9
+    WCOG65CBR-9 WCTG-CUS WCTG34-2 WCTG35-2 WCTG44-2 WCTG45-2 WCTG54-2 WCTG55-2 WDALG-CUS WDEG-CUS WDEG44-2
+    WDEG44-3 WDEG44CBR-2 WDEG44CBR-3 WDENG-CUS WDLG-CUS WFIG-CUS WFIG44-11 WFIG44-23 WFIG44-24 WFIG45-11 WFIG45-23
+    WFIG45-24 WFIG54-11 WFIG55-11 WFIG64-11 WFIG64-24 WFIG65-11 WFIG65-24 WFLG-CUS WFLG44 WFLG45 WFLG54 WFLG55
+    WFLG64 WFLG65 WHIG-CUS WHIG44 WHIG45 WHIG54 WHIG55 WHIG64 WHIG65 WILG-CUS WILG34-2 WILG34-3 WILG35-2 WILG35-3
+    WILG43-2 WILG43-3 WILG44-2 WILG44-3 WILG45-2 WILG45-3 WILG54-2 WILG54-3 WILG55-2 WILG55-3 WKAG-CUS WKYG-CUS
+    WKYG44 WKYG44CBR WKYG45 WKYG45CBR WKYG54 WKYG54CBR WKYG55 WKYG55CBR WKYG64 WKYG64CBR WKYG65 WKYG65CBR WMAG-CUS
+    WMAG44 WMAG44CBR WMAG45 WMAG45CBR WMAG54 WMAG54CBR WMAG55 WMAG55CBR WMAG64 WMAG64CBR WMAG65 WMAG65CBR WMDG-CUS
+    WMDG34-2 WMDG34-3 WMDG34-5 WMDG35-2 WMDG35-3 WMDG35-5 WMDG44-2 WMDG44-3 WMDG44-5 WMDG44CBR-2 WMDG44CBR-3
+    WMDG45-2 WMDG45-3 WMDG45-5 WMDG45CBR-2 WMDG45CBR-3 WMDG54-2 WMDG54-3 WMDG54-5 WMDG54CBR-2 WMDG54CBR-3 WMDG55-2
+    WMDG55-3 WMDG55-5 WMDG55CBR-2 WMDG55CBR-3 WMNG-CUS WMNG44 WMNG44CBR WMNG45 WMNG45CBR WMNG54 WMNG54CBR WMNG55
+    WMNG55CBR WMNG64 WMNG64CBR WMNG65 WMNG65CBR WMOG-CUS WMOG44 WMOG44CBR WMOG45 WMOG45CBR WMOG54 WMOG54CBR WMOG55
+    WMOG55CBR WMOG64 WMOG64CBR WMOG65 WMOG65CBR WMTG-CUS WMTG44 WMTG44CBR WMTG45 WMTG45CBR WMTG54 WMTG54CBR WMTG55
+    WMTG55CBR WMTG64 WMTG64CBR WMTG65 WMTG65CBR WNCG-CUS WNCG34-2 WNCG34-3 WNCG34-5 WNCG35-2 WNCG35-3 WNCG35-5
+    WNCG44-2 WNCG44-3 WNCG44-5 WNCG44CBR-2 WNCG44CBR-3 WNCG45-2 WNCG45-3 WNCG45-5 WNCG45CBR-2 WNCG45CBR-3 WNCG54-2
+    WNCG54-3 WNCG54-5 WNCG54CBR-2 WNCG54CBR-3 WNCG55-2 WNCG55-3 WNCG55-5 WNCG55CBR-2 WNCG55CBR-3 WNDG-CUS
+    WNDG44-14 WNDG44-16 WNDG45-14 WNDG45-16 WNDG54-14 WNDG54-16 WNDG55-14 WNDG55-16 WNDG64-14 WNDG64-16 WNDG65-14
+    WNDG65-16 WNEG-CUS WNEG44 WNEG44-16 WNEG44CBR WNEG44CBR-16 WNEG45 WNEG45-16 WNEG45CBR WNEG45CBR-16 WNEG54
+    WNEG54-16 WNEG54CBR WNEG54CBR-16 WNEG55 WNEG55-16 WNEG55CBR WNEG55CBR-16 WNEG64 WNEG64-16 WNEG64CBR
+    WNEG64CBR-16 WNEG65 WNEG65-16 WNEG65CBR WNEG65CBR-16 WNEG74 WNEG74-16 WNEG74CBR WNEG74CBR-16 WNEG75 WNEG75-16
+    WNEG75CBR WNEG75CBR-16 WNEG84 WNEG84-16 WNEG84CBR WNEG84CBR-16 WNEG85 WNEG85-16 WNEG85CBR WNEG85CBR-16
+    WNHG-CUS WNHG44 WNHG44CBR WNHG45 WNHG45CBR WNHG54 WNHG54CBR WNHG55 WNHG55CBR WNHG64 WNHG64CBR WNHG65 WNHG65CBR
+    WNMG-CUS WNMG44 WNMG44-16 WNMG45 WNMG45-16 WNMG54 WNMG54-16 WNMG55 WNMG55-16 WNMG64 WNMG64-16 WNMG65 WNMG65-16
+    WNMG74 WNMG74-16 WNMG75 WNMG75-16 WNMG84 WNMG84-16 WNMG85 WNMG85-16 WNOG-CUS WNORG-CUS WNVG-CUS WNVG34-1
+    WNVG35-1 WNVG44-1 WNVG45-1 WNVG54-1 WNVG55-1 WNYG-CUS WNYG44 WNYG44CBR WNYG45 WNYG45CBR WNYG54 WNYG54CBR
+    WNYG55 WNYG55CBR WNYG64 WNYG64CBR WNYG65 WNYG65CBR WOKG-CUS WOKG44 WOKG44-16 WOKG45 WOKG45-16 WOKG454
+    WOKG454-16 WOKG455 WOKG455-16 WOKG53 WOKG53-16 WOKG53-2DL WOKG53-2SL WOKG53-CS WOKG53-OS WOKG53-OSS WOKG54
+    WOKG54-16 WOKG54-2DL WOKG54-2SL WOKG54-CS WOKG54-OS WOKG54-OSS WOKG55 WOKG55-16 WOKG55-2DL WOKG55-2SL
+    WOKG55-CS WOKG55-OS WOKG55-OSS WOKG63 WOKG63-16 WOKG63-2DL WOKG63-2SL WOKG63-CS WOKG63-OS WOKG63-OSS WOKG64
+    WOKG64-16 WOKG64-2DL WOKG64-2SL WOKG64-CS WOKG64-OS WOKG64-OSS WOKG65 WOKG65-16 WOKG65-2DL WOKG65-2SL
+    WOKG65-CS WOKG65-OS WOKG65-OSS WOKG74 WOKG74-16 WOKG74-2DL WOKG74-2SL WOKG74-CS WOKG74-OS WOKG74-OSS WOKG75
+    WOKG75-16 WOKG75-2DL WOKG75-2SL WOKG75-CS WOKG75-OS WOKG75-OSS WOKG84 WOKG84-16 WOKG84-2DL WOKG84-2SL
+    WOKG84-CS WOKG84-OS WOKG84-OSS WOKG85 WOKG85-16 WOKG85-2DL WOKG85-2SL WOKG85-CS WOKG85-OS WOKG85-OSS
+    WPA7CBR-16 WPAG-CUS WPAG44 WPAG44-16 WPAG44-80 WPAG44CBR WPAG44CBR-16 WPAG44CBR-80 WPAG45 WPAG45-16 WPAG45-80
+    WPAG45CBR WPAG45CBR-16 WPAG45CBR-80 WPAG54 WPAG54-16 WPAG54-80 WPAG54CBR WPAG54CBR-16 WPAG54CBR-80 WPAG55
+    WPAG55-16 WPAG55-80 WPAG55CBR WPAG55CBR-16 WPAG55CBR-80 WPAG64 WPAG64-16 WPAG64-80 WPAG64CBR WPAG64CBR-16
+    WPAG64CBR-80 WPAG65 WPAG65-16 WPAG65-80 WPAG65CBR WPAG65CBR-16 WPAG65CBR-80 WPAG74 WPAG74-16 WPAG74CBR
+    WPAG74CBR-16 WPAG75 WPAG75-16 WPAG75CBR WPAG75CBR-16 WPAG84 WPAG84-16 WPAG84CBR WPAG84CBR-16 WPAG85 WPAG85-16
+    WPAG85CBR WPAG85CBR-16 WRCG-CUS WRIG-CUS WRIG34-2 WRIG34-3 WRIG34-5 WRIG35-2 WRIG35-3 WRIG35-5 WRIG44-2
+    WRIG44-3 WRIG44-5 WRIG45-2 WRIG45-3 WRIG45-5 WRIG54-2 WRIG54-3 WRIG54-5 WRIG55-2 WRIG55-3 WRIG55-5 WSCG-CUS
+    WSCG34-2 WSCG34-3 WSCG34-5 WSCG35-2 WSCG35-3 WSCG35-5 WSCG44-2 WSCG44-3 WSCG44-5 WSCG44CBR-2 WSCG44CBR-3
+    WSCG45-2 WSCG45-3 WSCG45-5 WSCG45CBR-2 WSCG45CBR-3 WSCG54-2 WSCG54-3 WSCG54-5 WSCG54CBR-2 WSCG54CBR-3 WSCG55-2
+    WSCG55-3 WSCG55-5 WSCG55CBR-2 WSCG55CBR-3 WSDG-CUS WSLG-CUS WTNG-CUS WTNG44 WTNG45 WTNG54 WTNG55 WTNG64 WTNG65
+    WUTG-CUS WUTG44 WUTG44-16 WUTG45 WUTG45-16 WUTG54 WUTG54-16 WUTG55 WUTG55-16 WUTG64 WUTG64-16 WUTG65 WUTG65-16
+    WUTG74 WUTG74-16 WUTG75 WUTG75-16 WUTG84 WUTG84-16 WUTG85 WUTG85-16 WVTG-CUS WVTG44 WVTG44CBR WVTG45 WVTG45CBR
+    WVTG54 WVTG54CBR WVTG55 WVTG55CBR WVTG64 WVTG64CBR WVTG65 WVTG65CBR WWG-CUS WWIG-CUS WWYG-CUS CSSPG44 CSSPG45
+    CSSPG54 CSSPG54CBR CSSPG55 CSSPG55CBR LSR2G3 LSR2G4 LSR2G5 LSR2HUP LSR33GR LSR3G3 LSR3G4 LSR3G5 LSR45GR
+    LSR57GR PSR2G4 PSR2G5 PSR2HUP PSR33GR PSR3G4 PSR3G5 PSR45GR PSR57GR
+  `.trim().split(/\s+/).forEach(c=>{ WOOD_CODE_CATS[c] = 'Gate'; });
+  `
+    ACQ-CUS ACQ104 ACQ104A ACQ104F ACQ104H ACQ104V ACQ105 ACQ105A ACQ105F ACQ105H ACQ105V ACQ106 ACQ124 ACQ124A
+    ACQ124F ACQ124H ACQ124V ACQ125 ACQ125A ACQ125F ACQ125H ACQ125V ACQ126 ACQ164 ACQ64 ACQ84 ACQ84A ACQ84F ACQ84H
+    ACQ84V ACQ85 ACQ85A ACQ85F ACQ85H ACQ85V ACQ86 ACQ94A ACQ94F ACQ94H ACQ94V ACQ95 SO-ACQ SO-WC WC-CUS WC104
+    WC104A WC104F WC104H WC104V WC105 WC105A WC105F WC105H WC105V WC106 WC124 WC125 WC125A WC125F WC125H WC125V
+    WC126 WC74 WC84 WC84A WC84F WC84H WC84V WC85 WC85-2HC WC85-2HE WC85-2HL WC85-3HC WC85-3HE WC85-3HL WC85A WC85F
+    WC85H WC85V WC94 WC94A WC94F WC94H WC94V WC95 WC95A WC95F WC95H WC95V WCR104 WCR84 RC-CUS RC124 RCC104 RCC94
+    SO-RC PSR2HC PSR2HE PSR3HC PSR3HE RCP10 RCP7 RCP8 WHC4 WHC4OS WHC5 WHC5OS WHC6 WHC6OS WYC4 WYC4OS WYC5 WYC5OS
+    WYC6 WYC6OS WLL WTRL
+  `.trim().split(/\s+/).forEach(c=>{ WOOD_CODE_CATS[c] = 'Post'; });
+
+  function categoryForCode(code, desc, prod){
+    const d = (desc || '').toUpperCase(), c = (code || '').toUpperCase();
+    if(prod === '0505' || prod === '0515') return 'Gate';
+    if(/\bGATE\b/.test(d) || /G\d{2}(?!\d)|G\d(?=$|-)/.test(c)) return 'Gate';
+    if(/\bPOST\b/.test(d) || prod === '0530' || prod === '0535' || prod === '0540') return 'Post';
+    return 'Fence';
+  }
+
+  // The built-in list above is the starting point; codes uploaded on the Manage
+  // tab (stored in Firestore) are layered on top of it.
+  let itemCodes = WOOD_CODES;
+  let itemCats = WOOD_CODE_CATS;
+
   function lookupWoodCode(raw){
     const key = (raw || '').trim().toUpperCase();
-    return Object.prototype.hasOwnProperty.call(WOOD_CODES, key) ? { code: key, desc: WOOD_CODES[key] } : null;
+    return Object.prototype.hasOwnProperty.call(itemCodes, key) ? { code: key, desc: itemCodes[key], cat: itemCats[key] || 'Fence' } : null;
   }
 
   function fillCodeList(){
     const dl = document.getElementById('a_codeList');
     if(dl.children.length) return;
     const frag = document.createDocumentFragment();
-    Object.keys(WOOD_CODES).forEach(code=>{
+    Object.keys(itemCodes).forEach(code=>{
       const o = document.createElement('option');
       o.value = code;
-      o.label = WOOD_CODES[code] || 'Custom item';
+      o.label = itemCodes[code] || 'Custom item';
       frag.appendChild(o);
     });
     dl.appendChild(frag);
@@ -3014,6 +3133,10 @@
     const raw = document.getElementById('a_itemNumber').value.trim();
     const match = lookupWoodCode(raw);
     note.style.color = '';
+    if(match){
+      const catSel = document.getElementById('a_category');
+      if(catSel.value !== match.cat){ catSel.value = match.cat; fillSubTypeList('a_subType', match.cat); }
+    }
     if(!match){
       desc.value = ''; desc.readOnly = true; desc.placeholder = 'Fills in from the item code';
       if(raw){ note.textContent = 'Not in the item code list — pick one from the suggestions.'; note.style.color = 'var(--amber)'; }
@@ -3022,11 +3145,11 @@
     }
     if(match.desc){
       desc.value = match.desc; desc.readOnly = true;
-      note.textContent = '\u2713 In the item code list'; note.style.color = 'var(--sage)';
+      note.textContent = '\u2713 In the item code list \u2014 ' + match.cat; note.style.color = 'var(--sage)';
     } else {
       if(desc.readOnly) desc.value = '';
       desc.readOnly = false; desc.placeholder = 'Custom item \u2014 write out the description';
-      note.textContent = 'Custom item \u2014 write the description yourself.'; note.style.color = 'var(--amber)';
+      note.textContent = 'Custom item (' + match.cat + ') \u2014 write the description yourself.'; note.style.color = 'var(--amber)';
     }
   }
   document.getElementById('a_itemNumber').addEventListener('input', updateCodeFields);
@@ -3095,6 +3218,155 @@
       btn.disabled = false;
     }
   });
+
+  // ---------- Item codes: upload an updated CSV (Manage tab) ----------
+  // The merged list is saved as one Firestore doc (config/itemCodes) as an array
+  // of {c: code, d: description}. Uploads only add or update — never delete.
+  let itemCodesMeta = null;
+  let pendingCodes = null;
+
+  function onItemCodesSnapshot(doc){
+    const fromDb = {}, dbCats = {};
+    itemCodesMeta = null;
+    if(doc.exists){
+      const data = doc.data();
+      (data.list || []).forEach(e=>{
+        if(!e || !e.c) return;
+        const c = String(e.c).toUpperCase();
+        fromDb[c] = e.d || '';
+        if(e.k) dbCats[c] = e.k;
+      });
+      itemCodesMeta = { by: data.updatedBy, at: data.updatedAt };
+    }
+    itemCodes = Object.assign({}, WOOD_CODES, fromDb);
+    itemCats = Object.assign({}, WOOD_CODE_CATS, dbCats);
+    document.getElementById('a_codeList').innerHTML = ''; // rebuilt next time Add inventory opens
+    renderCodeStatus();
+  }
+
+  function renderCodeStatus(){
+    const keys = Object.keys(itemCodes);
+    const custom = keys.filter(k => !itemCodes[k]).length;
+    let t = keys.length + ' codes in the list (' + custom + ' custom — description written by hand when added).';
+    t += itemCodesMeta
+      ? ' Last updated by ' + (itemCodesMeta.by || 'Unknown') + ' on ' + new Date(itemCodesMeta.at).toLocaleString() + '.'
+      : ' Using the list built into the file.';
+    document.getElementById('codeStatus').textContent = t;
+  }
+
+  async function readCsvText(file){
+    const buf = await file.arrayBuffer();
+    try{ return new TextDecoder('utf-8', {fatal:true}).decode(buf); }
+    catch(e){ return new TextDecoder('windows-1252').decode(buf); } // Sage exports aren't always UTF-8
+  }
+
+  function parseCodeCsv(text){
+    // Sage's code export uses old-style CR-only line endings; parseCSV only breaks rows on \n.
+    const rows = parseCSV(text.replace(/\r\n?/g, '\n'));
+    const h = rows.findIndex(r => r.some(c => c.trim().toLowerCase() === 'item code'));
+    if(h === -1) throw new Error('Could not find an "Item Code" column. Make sure it\'s the item code export.');
+    const head = rows[h].map(c => c.trim().toLowerCase());
+    const ci = head.indexOf('item code'), di = head.indexOf('description'), pi = head.indexOf('prod');
+    if(di === -1) throw new Error('Could not find a "Description" column next to "Item Code".');
+    const out = {};
+    rows.slice(h + 1).forEach(r=>{
+      const code = (r[ci] || '').trim().toUpperCase();
+      if(!code) return;
+      let prod = pi === -1 ? '' : (r[pi] || '').trim();
+      if(/^\d+$/.test(prod)) prod = ('0000' + prod).slice(-4); // Excel can drop the leading zero
+      // doubled apostrophe = inch mark in older exports
+      out[code] = { d: (r[di] || '').trim().replace(/\u00d5\u00d5/g, '"'), prod };
+    });
+    if(!Object.keys(out).length) throw new Error('No item codes found below the header row.');
+    return out;
+  }
+
+  async function handleCodeFile(file){
+    const errEl = document.getElementById('codeImportError');
+    errEl.style.display = 'none';
+    document.getElementById('codePreview').style.display = 'none';
+    pendingCodes = null;
+    try{
+      const incoming = parseCodeCsv(await readCsvText(file));
+      const merged = Object.assign({}, itemCodes);
+      const mergedCats = Object.assign({}, itemCats);
+      const added = [], changed = [];
+      let same = 0;
+      Object.keys(incoming).forEach(code=>{
+        const { d, prod } = incoming[code];
+        const exists = Object.prototype.hasOwnProperty.call(itemCodes, code);
+        if(!exists){
+          const k = categoryForCode(code, d, prod);
+          merged[code] = d; mergedCats[code] = k;
+          added.push({code, d, k});
+          return;
+        }
+        const newDesc = d || itemCodes[code];
+        const oldCat = itemCats[code] || 'Fence';
+        // Only re-work the category when the file has a Prod column to go on.
+        const newCat = prod ? categoryForCode(code, newDesc, prod) : oldCat;
+        const descChanged = !!d && d !== itemCodes[code];
+        if(descChanged || newCat !== oldCat){
+          merged[code] = newDesc; mergedCats[code] = newCat;
+          changed.push({code, from: itemCodes[code], to: newDesc, descChanged, oldCat, newCat});
+        } else same++;
+      });
+      const summary = document.getElementById('codePreviewSummary');
+      const details = document.getElementById('codePreviewDetails');
+      summary.textContent = added.length + ' new · ' + changed.length + ' changed · ' + same + ' already up to date';
+      details.innerHTML =
+        added.map(a => '<div><strong>New:</strong> ' + escapeHtml(a.code) + ' — ' + (a.d ? escapeHtml(a.d) : '<span class="muted">custom (no description)</span>') + ' <span class="muted">[' + a.k + ']</span></div>').join('') +
+        changed.map(c => '<div><strong>Changed:</strong> ' + escapeHtml(c.code) + ': ' +
+          (c.descChanged ? '<span class="muted">' + escapeHtml(c.from || '(blank)') + '</span> → ' + escapeHtml(c.to) + ' ' : '') +
+          (c.oldCat !== c.newCat ? '<span class="muted">[' + c.oldCat + ' → ' + c.newCat + ']</span>' : '') + '</div>').join('') ||
+        '<div class="muted">Nothing new in this file — the list is already up to date.</div>';
+      pendingCodes = (added.length || changed.length) ? { merged, mergedCats, added, changed } : null;
+      document.getElementById('applyCodesBtn').style.display = pendingCodes ? '' : 'none';
+      document.getElementById('codePreview').style.display = 'block';
+    }catch(err){
+      errEl.textContent = err.message;
+      errEl.style.display = 'block';
+    }
+  }
+
+  const codeDropZone = document.getElementById('codeDropZone');
+  const codeFileInput = document.getElementById('codeFileInput');
+  codeDropZone.addEventListener('click', ()=> codeFileInput.click());
+  codeDropZone.addEventListener('dragover', e=>{ e.preventDefault(); codeDropZone.classList.add('drag'); });
+  codeDropZone.addEventListener('dragleave', ()=> codeDropZone.classList.remove('drag'));
+  codeDropZone.addEventListener('drop', e=>{
+    e.preventDefault(); codeDropZone.classList.remove('drag');
+    if(e.dataTransfer.files[0]) handleCodeFile(e.dataTransfer.files[0]);
+  });
+  codeFileInput.addEventListener('change', e=>{
+    if(e.target.files[0]) handleCodeFile(e.target.files[0]);
+  });
+  document.getElementById('cancelCodesBtn').addEventListener('click', ()=>{
+    document.getElementById('codePreview').style.display = 'none';
+    codeFileInput.value = '';
+    pendingCodes = null;
+  });
+  document.getElementById('applyCodesBtn').addEventListener('click', async ()=>{
+    if(!pendingCodes || !db) return;
+    const btn = document.getElementById('applyCodesBtn');
+    const { merged, mergedCats, added, changed } = pendingCodes;
+    btn.disabled = true;
+    try{
+      const list = Object.keys(merged).map(c => ({ c, d: merged[c], k: mergedCats[c] || 'Fence' }));
+      await db.collection(SUBTYPES_COL).doc('itemCodes').set({
+        list, updatedBy: currentUser || 'Unknown', updatedAt: Date.now()
+      });
+      logActivity('Updated item codes: ' + added.length + ' new, ' + changed.length + ' changed');
+      document.getElementById('codePreview').style.display = 'none';
+      codeFileInput.value = '';
+      pendingCodes = null;
+    }catch(err){
+      alert('Could not save item codes: ' + err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  renderCodeStatus();
 
   // ---------- Run report ----------
   function reportSelectedCategories(){
